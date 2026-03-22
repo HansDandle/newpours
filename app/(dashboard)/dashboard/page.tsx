@@ -119,6 +119,7 @@ export default function DashboardPage() {
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [zip, setZip] = useState("");
   const [statusFilter, setStatusFilter] = useState(""); // "pending" | "approved" | ""
+  const [statusSearch, setStatusSearch] = useState(""); // search for transfer, expir, etc.
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -154,6 +155,7 @@ export default function DashboardPage() {
     if (zip && lic.zipCode !== zip) return false;
     if (statusFilter === "pending" && lic.licenseTypeLabel !== "Pending Application") return false;
     if (statusFilter === "approved" && lic.licenseTypeLabel === "Pending Application") return false;
+    if (statusSearch && !lic.status?.toLowerCase().includes(statusSearch.toLowerCase())) return false;
     if (dateFrom || dateTo) {
       const d = lic.applicationDate ? new Date(lic.applicationDate).getTime() : null;
       if (d === null) return false;
@@ -227,6 +229,14 @@ export default function DashboardPage() {
 
         <input
           type="text"
+          placeholder="Search status (e.g., transfer, expired)"
+          className="border rounded-lg px-3 py-2 text-sm bg-white"
+          value={statusSearch}
+          onChange={(e) => setStatusSearch(e.target.value)}
+        />
+
+        <input
+          type="text"
           placeholder="Zip code"
           className="border rounded-lg px-3 py-2 text-sm w-28"
           value={zip}
@@ -252,9 +262,9 @@ export default function DashboardPage() {
           />
         </div>
 
-        {(counties.size > 0 || types.size > 0 || zip || statusFilter || dateFrom || dateTo) && (
+        {(counties.size > 0 || types.size > 0 || zip || statusFilter || statusSearch || dateFrom || dateTo) && (
           <button
-            onClick={() => { setCounties(new Set()); setTypes(new Set()); setZip(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setCounties(new Set()); setTypes(new Set()); setZip(""); setStatusFilter(""); setStatusSearch(""); setDateFrom(""); setDateTo(""); }}
             className="text-xs text-gray-400 hover:text-gray-700 underline px-2"
           >
             Clear filters
