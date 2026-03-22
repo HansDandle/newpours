@@ -11,6 +11,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-export const firebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
-export const auth = getAuth(firebaseApp);
-export const db = getFirestore(firebaseApp);
+// Guard: skip initialization during build when env vars aren't present.
+// At runtime (browser + Vercel server) the vars are always set.
+const app = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+  ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
+  : null;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const auth = app ? getAuth(app) : null as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const db = app ? getFirestore(app) : null as any;
