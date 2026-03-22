@@ -51,7 +51,17 @@ function MultiSelect({
     onChange(next);
   };
 
+  const toggleAll = () => {
+    // If all selected, clear all. Otherwise, select all.
+    if (selected.size === options.length) {
+      onChange(new Set());
+    } else {
+      onChange(new Set(options));
+    }
+  };
+
   const isActive = selected.size > 0;
+  const allSelected = selected.size === options.length && options.length > 0;
   const btnLabel = selected.size === 0 ? label : selected.size === 1 ? [...selected][0] : `${selected.size} selected`;
 
   return (
@@ -70,6 +80,20 @@ function MultiSelect({
       </button>
       {open && (
         <div className="absolute z-20 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+          {/* Select All / Clear All */}
+          {options.length > 0 && (
+            <>
+              <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-sm font-semibold border-b border-gray-100 bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={toggleAll}
+                  className="accent-amber-500"
+                />
+                <span>{allSelected ? 'Clear All' : 'Select All'}</span>
+              </label>
+            </>
+          )}
           {options.map((opt) => (
             <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
               <input
