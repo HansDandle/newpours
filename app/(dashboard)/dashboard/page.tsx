@@ -133,7 +133,7 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchLicenses = async () => {
       try {
-        const q = query(collection(db, "licenses"), orderBy("applicationDate", "desc"), limit(50));
+        const q = query(collection(db, "licenses"), orderBy("applicationDate", "desc"), limit(500));
         const snap = await getDocs(q);
         setLicenses(snap.docs.map((d) => ({ licenseNumber: d.id, ...d.data() } as License)));
       } catch {
