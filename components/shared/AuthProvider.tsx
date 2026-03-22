@@ -10,6 +10,7 @@ interface AuthContextType {
 }
 
 const DEV_KEY = "np_dev_auth";
+const DEV_ENABLED = process.env.NODE_ENV !== "production";
 
 // Minimal fake User shape so the rest of the app treats it as logged in
 const DEV_USER = {
@@ -29,8 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Dev bypass: if the flag is set, skip Firebase and use the fake user
-    if (typeof window !== "undefined" && localStorage.getItem(DEV_KEY) === "1") {
+    // Dev bypass: only active outside production
+    if (DEV_ENABLED && typeof window !== "undefined" && localStorage.getItem(DEV_KEY) === "1") {
       setUser(DEV_USER);
       setLoading(false);
       return;
@@ -56,7 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export const useAuth = () => useContext(AuthContext);
 
-/** Call this from the login page to activate the dev bypass */
+/** Call this from the login page to activate the dev bypass (dev/test only) */
 export function devLogin() {
-  if (typeof window !== "undefined") localStorage.setItem(DEV_KEY, "1");
+  if (DEV_ENABLED && typeof window !== "undefined") localStorage.setItem(DEV_KEY, "1");
 }

@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { adminDb } from "@/lib/firebase-admin";
+import { adminDb, getAdminAuth } from "@/lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-02-25.clover" });
   try {
-    const { uid } = await req.json();
-    if (!uid) return NextResponse.json({ error: "Missing uid" }, { status: 400 });
+    // Verify the caller's Firebase ID token — never trust a uid from the request body
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    let uid: string;
+    try {
+      const decoded = await getAdminAuth().verifyIdToken(authHeader.slice(7));
+      uid = decoded.uid;
+    } catch {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
 
     const userSnap = await adminDb.collection("users").doc(uid).get();
     const stripeCustomerId = userSnap.data()?.stripeCustomerId;

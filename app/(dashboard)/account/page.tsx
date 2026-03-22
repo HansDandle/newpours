@@ -17,10 +17,14 @@ export default function AccountPage() {
     if (!user) return;
     setPortalLoading(true);
     try {
+      const idToken = await user.getIdToken();
       const res = await fetch("/api/stripe/portal", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: user.uid }),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
