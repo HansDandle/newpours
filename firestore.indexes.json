@@ -1,0 +1,23 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "licenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "licenseType", "order": "ASCENDING"},
+        {"fieldPath": "zipCode", "order": "ASCENDING"},
+        {"fieldPath": "applicationDate", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "alerts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "userId", "order": "ASCENDING"},
+        {"fieldPath": "deliveredAt", "order": "DESCENDING"}
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
