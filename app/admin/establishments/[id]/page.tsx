@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { notFound } from "next/navigation";
@@ -88,7 +88,7 @@ function normalizeDocData(raw: Record<string, any>): EstDoc {
   };
 }
 
-export default function EstablishmentDetailPage({ params }: { params: { id: string } }) {
+export default function EstablishmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [data, setData] = useState<EstDoc | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound404, setNotFound404] = useState(false);
@@ -96,7 +96,7 @@ export default function EstablishmentDetailPage({ params }: { params: { id: stri
   const [reenriching, setReenriching] = useState(false);
   const { user } = useAuth();
 
-  const { id } = params;
+  const { id } = use(params);
 
   useEffect(() => {
     getDoc(doc(db, "establishments", id))

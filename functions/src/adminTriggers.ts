@@ -10,6 +10,8 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { runComptrollerRevenueJob } from './enrichComptroller';
 import { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';
+import { googleMapsApiKeySecret, runGooglePlacesJob } from './enrich';
+import { runBuildingPermitsJob } from './enrichBuildingPermits';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -34,7 +36,10 @@ function inLookbackWindow(value: string | undefined, since: Date): boolean {
  * and update the doc with the result.
  */
 export const processAdminTrigger = onDocumentCreated(
-  'system/adminTriggers/items/{docId}',
+  {
+    document: 'system/adminTriggers/items/{docId}',
+    secrets: [googleMapsApiKeySecret],
+  },
   async (event) => {
     const snap = event.data;
     if (!snap) return;
@@ -44,6 +49,15 @@ export const processAdminTrigger = onDocumentCreated(
     const { jobName, establishmentId, source } = data;
     const countyFilter = String(data.county ?? '').trim().toLowerCase();
     const lookbackMonthsRaw = Number(data.lookbackMonths ?? 24);
+    const revenueMonth = String(data.revenueMonth ?? '').trim() || undefined;
+    const minRevenueRaw = Number(data.minRevenue);
+    const minRevenue = Number.isFinite(minRevenueRaw) ? minRevenueRaw : undefined;
+    const onlyMissingGoogle = data.onlyMissingGoogle === true;
+    const establishmentIds = Array.isArray(data.establishmentIds)
+      ? data.establishmentIds
+        .map((id: unknown) => String(id ?? '').trim())
+        .filter((id: string) => id.length > 0)
+      : [];
     const lookbackMonths = Number.isFinite(lookbackMonthsRaw)
       ? Math.min(Math.max(Math.floor(lookbackMonthsRaw), 1), 24)
       : 24;
@@ -61,7 +75,7 @@ export const processAdminTrigger = onDocumentCreated(
       status: 'running',
       recordsProcessed: 0,
       recordsFailed: 0,
-      notes: `Manual trigger${countyFilter ? ` (county=${countyFilter})` : ''}, lookbackMonths=${lookbackMonths}`,
+      notes: `Manual trigger${countyFilter ? ` (county=${countyFilter})` : ''}, lookbackMonths=${lookbackMonths}${revenueMonth ? `, revenueMonth=${revenueMonth}` : ''}${minRevenue != null ? `, minRevenue=${minRevenue}` : ''}${onlyMissingGoogle ? ', onlyMissingGoogle=true' : ''}${establishmentIds.length ? `, targetedIds=${establishmentIds.length}` : ''}`,
     });
 
     try {
@@ -134,47 +148,23 @@ export const processAdminTrigger = onDocumentCreated(
         processed = result.matched + result.unmatched;
         notes = `Comptroller revenue import complete (${result.monthsProcessed} month(s)${countyFilter ? `, county=${countyFilter}` : ''}): matched=${result.matched}, unmatched=${result.unmatched}. Manual mode skips unmatched writes for speed.`;
       } else if (jobName === 'google_places_refresh') {
-        // Mark all (or filtered) establishments for Google Places enrichment
-        const query = db.collection('establishments');
-        const snapshot = await query.get();
-        let batch = db.batch();
-        let count = 0;
-
-        for (const docSnap of snapshot.docs) {
-          if (countyFilter && (docSnap.data().county ?? '').toLowerCase() !== countyFilter) continue;
-          batch.update(docSnap.ref, { 'enrichment.googlePlaces': 'pending' });
-          count++;
-          if (count % 500 === 0) {
-            await batch.commit();
-            batch = db.batch();
-          }
-        }
-        if (count % 500 !== 0) {
-          await batch.commit();
-        }
-        processed = count;
-        notes = `Marked ${count} establishment(s) for Google Places enrichment.`;
+        const result = await runGooglePlacesJob({
+          county: countyFilter || undefined,
+          lookbackMonths,
+          revenueMonth,
+          minRevenue,
+          onlyMissingGoogle,
+          establishmentIds: establishmentIds.length ? establishmentIds : undefined,
+        });
+        processed = result.processed;
+        notes = `Google Places (${lookbackMonths}mo${countyFilter ? `, county=${countyFilter}` : ''}${revenueMonth ? `, revenueMonth=${revenueMonth}` : ''}${minRevenue != null ? `, minRevenue=${minRevenue}` : ''}${onlyMissingGoogle ? ', onlyMissingGoogle=true' : ''}${establishmentIds.length ? `, targetedIds=${establishmentIds.length}` : ''}): complete=${result.complete}, no_match=${result.noMatch}, error=${result.error}, skipped=${result.skipped}`;
       } else if (jobName === 'building_permits') {
-        // Mark all (or filtered) establishments for building permits enrichment
-        const query = db.collection('establishments');
-        const snapshot = await query.get();
-        let batch = db.batch();
-        let count = 0;
-
-        for (const docSnap of snapshot.docs) {
-          if (countyFilter && (docSnap.data().county ?? '').toLowerCase() !== countyFilter) continue;
-          batch.update(docSnap.ref, { 'enrichment.buildingPermits': 'pending' });
-          count++;
-          if (count % 500 === 0) {
-            await batch.commit();
-            batch = db.batch();
-          }
-        }
-        if (count % 500 !== 0) {
-          await batch.commit();
-        }
-        processed = count;
-        notes = `Marked ${count} establishment(s) for building permits enrichment.`;
+        const result = await runBuildingPermitsJob({
+          county: countyFilter || undefined,
+          lookbackMonths,
+        });
+        processed = result.processed;
+        notes = `Building permits (${lookbackMonths}mo${countyFilter ? `, county=${countyFilter}` : ''}): complete=${result.complete}, no_match=${result.noMatch}, unavailable=${result.unavailable}, error=${result.error}`;
       } else {
         finalStatus = 'partial';
         notes = `Admin trigger job '${jobName}' acknowledged but not implemented in processAdminTrigger yet.`;

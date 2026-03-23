@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/components/shared/AuthProvider";
 
 const EXPLORER_STORAGE_KEY = "newpours.explorer.filters.v1";
 
@@ -37,6 +38,8 @@ type ExplorerRow = {
     reviewCount?: number;
     website?: string;
     priceLevel?: number;
+    phoneNumber?: string;
+    hours?: { weekday_text?: string[]; open_now?: boolean } | null;
   };
   comptroller?: {
     taxpayerNumber?: string;
@@ -124,6 +127,15 @@ function formatDate(value?: any) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function formatGoogleHours(hours?: { weekday_text?: string[]; open_now?: boolean } | null) {
+  if (!hours) return "No hours found";
+  const lines = Array.isArray(hours.weekday_text) ? hours.weekday_text.filter(Boolean) : [];
+  if (lines.length > 0) return lines.slice(0, 2).join(" | ");
+  if (hours.open_now === true) return "Open now";
+  if (hours.open_now === false) return "Closed now";
+  return "No hours found";
+}
+
 function getTimestamp(value?: any) {
   if (!value) return 0;
   const date = value?.toDate ? value.toDate() : new Date(value);
@@ -187,6 +199,8 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
       reviewCount: raw.googlePlaces?.reviewCount,
       website: raw.googlePlaces?.website,
       priceLevel: raw.googlePlaces?.priceLevel,
+      phoneNumber: raw.googlePlaces?.phoneNumber ?? raw.googlePlaces?.phone,
+      hours: raw.googlePlaces?.hours ?? raw.googlePlaces?.openingHours ?? null,
     },
     comptroller: {
       ...(raw.comptroller ?? {}),
@@ -235,11 +249,16 @@ function ExplorerCard({ title, value, meta }: { title: string; value: string; me
 }
 
 export default function ExplorerPage() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<ExplorerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [enrichingFiltered, setEnrichingFiltered] = useState(false);
+  const [onlyMissingGoogle, setOnlyMissingGoogle] = useState(true);
+  const [adminMessage, setAdminMessage] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -261,6 +280,23 @@ export default function ExplorerPage() {
     } catch {
     }
   }, [filters, hydrated]);
+
+  useEffect(() => {
+    const loadAdminClaim = async () => {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+      try {
+        const tokenResult = await user.getIdTokenResult(false);
+        setIsAdmin(tokenResult.claims.role === "admin");
+      } catch {
+        setIsAdmin(false);
+      }
+    };
+
+    loadAdminClaim();
+  }, [user]);
 
   useEffect(() => {
     getDocs(collection(db, "establishments"))
@@ -413,6 +449,51 @@ export default function ExplorerPage() {
     URL.revokeObjectURL(url);
   };
 
+  const runGoogleEnrichForFiltered = async () => {
+    if (!user || !isAdmin || enrichingFiltered) return;
+
+    const targetIds = filteredRows.map((row) => row.id).filter(Boolean);
+    if (!targetIds.length) {
+      setAdminMessage("No filtered venues to enrich.");
+      return;
+    }
+
+    const MAX_TARGET_IDS = 1000;
+    const slicedIds = targetIds.slice(0, MAX_TARGET_IDS);
+    const confirmMessage = `Queue Google Places refresh for ${slicedIds.length.toLocaleString()} filtered venue(s)${targetIds.length > MAX_TARGET_IDS ? ` (limited from ${targetIds.length.toLocaleString()})` : ""}?`;
+    if (!window.confirm(confirmMessage)) return;
+
+    setEnrichingFiltered(true);
+    setAdminMessage(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/admin/trigger/google_places_refresh", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          lookbackMonths: 24,
+          onlyMissingGoogle,
+          establishmentIds: slicedIds,
+        }),
+      });
+
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAdminMessage(payload?.error ? `Queue failed: ${payload.error}` : "Queue failed.");
+        return;
+      }
+
+      setAdminMessage(`Queued Google Places refresh for ${slicedIds.length.toLocaleString()} filtered venue(s).`);
+    } catch {
+      setAdminMessage("Queue failed due to a network or auth error.");
+    } finally {
+      setEnrichingFiltered(false);
+    }
+  };
+
   return (
     <section className="space-y-6">
       <div className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] p-6 shadow-sm">
@@ -487,6 +568,26 @@ export default function ExplorerPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {isAdmin ? (
+              <>
+                <label className="inline-flex items-center gap-2 rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={onlyMissingGoogle}
+                    onChange={(event) => setOnlyMissingGoogle(event.target.checked)}
+                    className="accent-amber-500"
+                  />
+                  Only missing Google matches
+                </label>
+                <button
+                  onClick={runGoogleEnrichForFiltered}
+                  disabled={enrichingFiltered || filteredRows.length === 0}
+                  className="rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {enrichingFiltered ? "Queueing..." : "Admin: Enrich filtered list"}
+                </button>
+              </>
+            ) : null}
             <select value={filters.website} onChange={(event) => setFilters((prev) => ({ ...prev, website: event.target.value as FilterState["website"] }))} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700">
               <option value="all">Website: all</option>
               <option value="yes">Website: yes</option>
@@ -501,6 +602,7 @@ export default function ExplorerPage() {
             <button onClick={() => setFilters((prev) => ({ ...prev, sortDir: prev.sortDir === "asc" ? "desc" : "asc" }))} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Direction: {filters.sortDir === "desc" ? "High to low" : "Low to high"}</button>
             <span className="ml-auto text-sm text-slate-500">{filteredRows.length.toLocaleString()} venues in current view</span>
           </div>
+          {isAdmin && adminMessage ? <p className="text-xs text-slate-600">{adminMessage}</p> : null}
         </div>
       </div>
 
@@ -603,6 +705,8 @@ export default function ExplorerPage() {
                   <DetailRow label="Address" value={[selected.address, selected.city, selected.county, selected.zipCode].filter(Boolean).join(", ") || "--"} />
                   <DetailRow label="Revenue Confidence" value={selected.comptroller?.confidence != null ? `${Math.round(selected.comptroller.confidence * 100)}%` : "--"} />
                   <DetailRow label="Match Method" value={selected.comptroller?.matchMethod || "--"} />
+                  <DetailRow label="Phone" value={selected.googlePlaces?.phoneNumber || "No phone found"} />
+                  <DetailRow label="Hours" value={formatGoogleHours(selected.googlePlaces?.hours)} />
                   <DetailRow label="Website" value={selected.googlePlaces?.website || "No website found"} />
                   <DetailRow label="Latest Inspection" value={selected.healthInspection?.latestInspectionDate ? `${selected.healthInspection.latestScore ?? "--"} on ${formatDate(selected.healthInspection.latestInspectionDate)}` : "No inspection data"} />
                   <DetailRow label="Permit Signal" value={selected.buildingPermits?.hasSignificantRecentWork ? `Recent permit value ${formatCurrency(selected.buildingPermits?.largestRecentPermitValue)}` : "No major permit signal"} />

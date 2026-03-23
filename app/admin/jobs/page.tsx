@@ -56,6 +56,9 @@ export default function AdminJobsPage() {
   const [detailRun, setDetailRun] = useState<JobRun | null>(null);
   const [county, setCounty] = useState<string>("");
   const [lookbackMonths, setLookbackMonths] = useState<number>(24);
+  const [revenueMonth, setRevenueMonth] = useState<string>("");
+  const [minRevenue, setMinRevenue] = useState<string>("");
+  const [onlyMissingGoogle, setOnlyMissingGoogle] = useState(true);
   const [previewing, setPreviewing] = useState<string | null>(null);
   const [triggers, setTriggers] = useState<TriggerDoc[]>([]);
   const [clearingStuck, setClearingStuck] = useState(false);
@@ -109,6 +112,9 @@ export default function AdminJobsPage() {
         body: JSON.stringify({
           county: county.trim() || null,
           lookbackMonths,
+          revenueMonth: jobKey === "google_places_refresh" ? revenueMonth.trim() || null : null,
+          minRevenue: jobKey === "google_places_refresh" && minRevenue.trim() ? Number(minRevenue) : null,
+          onlyMissingGoogle: jobKey === "google_places_refresh" ? onlyMissingGoogle : false,
         }),
       });
       const json = await res.json();
@@ -139,6 +145,9 @@ export default function AdminJobsPage() {
         body: JSON.stringify({
           county: county.trim() || null,
           lookbackMonths,
+          revenueMonth: jobKey === "google_places_refresh" ? revenueMonth.trim() || null : null,
+          minRevenue: jobKey === "google_places_refresh" && minRevenue.trim() ? Number(minRevenue) : null,
+          onlyMissingGoogle: jobKey === "google_places_refresh" ? onlyMissingGoogle : false,
           preview: true,
         }),
       });
@@ -197,6 +206,39 @@ export default function AdminJobsPage() {
               onChange={(e) => setLookbackMonths(Math.min(24, Math.max(1, Number(e.target.value) || 24)))}
               className="mt-1 w-full bg-gray-900 border border-gray-700 text-gray-200 rounded px-3 py-2 text-sm"
             />
+          </label>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+          <label className="text-xs text-gray-400">
+            Google revenue month (optional)
+            <input
+              value={revenueMonth}
+              onChange={(e) => setRevenueMonth(e.target.value)}
+              placeholder="YYYY-MM"
+              className="mt-1 w-full bg-gray-900 border border-gray-700 text-gray-200 rounded px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-gray-400">
+            Google minimum revenue (optional)
+            <input
+              type="number"
+              min={0}
+              value={minRevenue}
+              onChange={(e) => setMinRevenue(e.target.value)}
+              placeholder="e.g. 50000"
+              className="mt-1 w-full bg-gray-900 border border-gray-700 text-gray-200 rounded px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-xs text-gray-400 flex items-end">
+            <span className="w-full rounded border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-200 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={onlyMissingGoogle}
+                onChange={(e) => setOnlyMissingGoogle(e.target.checked)}
+                className="rounded border-gray-600 bg-gray-800"
+              />
+              Only missing Google matches
+            </span>
           </label>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -309,6 +351,9 @@ export default function AdminJobsPage() {
             <p className="text-xs text-gray-500 mb-5">
               Scope: {county.trim() ? `county=${county.trim()}, ` : "all counties, "}
               lookback={lookbackMonths} months
+              {confirmJob === "google_places_refresh" && revenueMonth.trim() ? `, revenueMonth=${revenueMonth.trim()}` : ""}
+              {confirmJob === "google_places_refresh" && minRevenue.trim() ? `, minRevenue=${minRevenue.trim()}` : ""}
+              {confirmJob === "google_places_refresh" && onlyMissingGoogle ? ", onlyMissingGoogle=true" : ""}
             </p>
             <div className="flex gap-2 justify-end">
               <button onClick={() => setConfirmJob(null)} className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm rounded">Cancel</button>

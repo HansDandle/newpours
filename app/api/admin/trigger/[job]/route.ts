@@ -29,33 +29,51 @@ async function fetchSocrataCount(
   sinceIso: string,
   county?: string
 ): Promise<number | null> {
-  const whereParts = [`${dateField} >= '${sinceIso}'`];
-  if (county) {
-    whereParts.push(`upper(county) = upper('${escapeSocrataString(county)}')`);
+  const escapedCounty = county ? escapeSocrataString(county) : null;
+  const sinceNoMillis = sinceIso.replace(/\.\d{3}Z$/, "");
+  const sinceDateOnly = sinceIso.slice(0, 10);
+
+  const dateLiterals = [sinceIso, sinceNoMillis, sinceDateOnly];
+  const whereClauses: string[] = [];
+
+  for (const literal of dateLiterals) {
+    if (escapedCounty) {
+      whereClauses.push(`${dateField} >= '${literal}' AND upper(county) = upper('${escapedCounty}')`);
+    }
+    whereClauses.push(`${dateField} >= '${literal}'`);
   }
 
-  const params = new URLSearchParams({
-    "$select": "count(*)",
-    "$where": whereParts.join(" AND "),
-    "$limit": "1",
-  });
+  for (const whereClause of whereClauses) {
+    const params = new URLSearchParams({
+      "$select": "count(*)",
+      "$where": whereClause,
+      "$limit": "1",
+    });
 
-  const res = await fetch(`${endpoint}?${params.toString()}`);
-  if (!res.ok) return null;
-  const rows = await res.json();
-  const first = Array.isArray(rows) ? rows[0] : null;
-  if (!first || typeof first !== "object") return null;
+    const res = await fetch(`${endpoint}?${params.toString()}`);
+    if (!res.ok) continue;
 
-  const raw = Object.values(first)[0];
-  const n = Number(raw);
-  return Number.isFinite(n) ? n : null;
+    const rows = await res.json();
+    const first = Array.isArray(rows) ? rows[0] : null;
+    if (!first || typeof first !== "object") continue;
+
+    const raw = Object.values(first)[0];
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+
+  return null;
 }
 
 async function buildPreview(
   db: ReturnType<typeof getAdminDb>,
   job: string,
   county: string,
-  lookbackMonths: number
+  lookbackMonths: number,
+  revenueMonth?: string,
+  minRevenue?: number,
+  onlyMissingGoogle?: boolean,
+  establishmentIds?: string[]
 ) {
   const since = new Date();
   since.setMonth(since.getMonth() - lookbackMonths);
@@ -130,18 +148,69 @@ async function buildPreview(
   }
 
   if (job === "google_places_refresh" || job === "building_permits") {
+    let query = db.collection("establishments") as FirebaseFirestore.Query;
+    if (county) query = query.where("county", "==", county);
+
+    const targetIdSet = new Set((establishmentIds ?? []).map((id) => String(id ?? "").trim()).filter(Boolean));
+    const snap = await query.limit(5000).get();
+    const since = new Date();
+    since.setMonth(since.getMonth() - lookbackMonths);
+
+    const candidates = snap.docs.filter((doc) => {
+      if (targetIdSet.size > 0 && !targetIdSet.has(doc.id)) return false;
+
+      const data = doc.data() as Record<string, any>;
+      const rawDate = data.applicationDate ?? data.firstSeenAt ?? data.effectiveDate;
+      const date = typeof rawDate?.toDate === "function" ? rawDate.toDate() : new Date(rawDate ?? 0);
+      if (Number.isNaN(date.getTime()) || date < since) return false;
+
+      if (job === "google_places_refresh") {
+        if (onlyMissingGoogle) {
+          const status = String(data.enrichment?.googlePlaces ?? data["enrichment.googlePlaces"] ?? "").trim().toLowerCase();
+          if (status === "complete") return false;
+        }
+
+        if (revenueMonth || minRevenue != null) {
+          const latestMonth = String(data.comptroller?.revenueDataThrough ?? data["comptroller.revenueDataThrough"] ?? "");
+          let revenue: number | null = null;
+          if (!revenueMonth || latestMonth === revenueMonth) {
+            const latestRevenue = Number(data.comptroller?.latestMonthRevenue ?? data["comptroller.latestMonthRevenue"]);
+            revenue = Number.isFinite(latestRevenue) ? latestRevenue : null;
+          }
+
+          if (revenueMonth && latestMonth !== revenueMonth) {
+            const monthlyRecords = (data.comptroller?.monthlyRecords ?? data["comptroller.monthlyRecords"] ?? []) as Array<Record<string, any>>;
+            const monthRecord = monthlyRecords.find((record) => String(record.month ?? "") === revenueMonth);
+            const monthRevenue = Number(monthRecord?.totalReceipts ?? 0);
+            revenue = Number.isFinite(monthRevenue) && monthRecord ? monthRevenue : null;
+          }
+
+          if (revenue == null || (minRevenue != null && revenue < minRevenue)) return false;
+        }
+      }
+
+      return true;
+    }).length;
+
     return {
       preview: true,
       job,
       scope: {
         county: county || "all",
         lookbackMonths,
+        targetedIds: targetIdSet.size,
       },
-      estimatedRecords: 0,
-      estimatedFirestoreReads: 0,
-      estimatedFirestoreWrites: 1,
-      estimatedExternalCalls: 0,
-      notes: ["Job key is accepted, but execution path is not fully implemented yet."],
+      estimatedRecords: candidates,
+      estimatedFirestoreReads: candidates,
+      estimatedFirestoreWrites: candidates * 2,
+      estimatedExternalCalls: job === "google_places_refresh" ? candidates * 2 : candidates,
+      notes: job === "building_permits"
+        ? ["Building permits currently enrich only Austin-supported records; unsupported jurisdictions are marked unavailable."]
+        : [
+            "Google Places refresh runs against establishments in the selected lookback window.",
+            ...(revenueMonth || minRevenue != null ? [`Revenue filter applied${revenueMonth ? ` for month ${revenueMonth}` : ""}${minRevenue != null ? ` with minimum ${minRevenue}` : ""}.`] : []),
+            ...(onlyMissingGoogle ? ["Only establishments without a complete Google match are included."] : []),
+          ],
     };
   }
 
@@ -194,7 +263,15 @@ export async function POST(
     );
   }
 
-  let body: { county?: string; lookbackMonths?: number; preview?: boolean } = {};
+  let body: {
+    county?: string;
+    lookbackMonths?: number;
+    preview?: boolean;
+    revenueMonth?: string;
+    minRevenue?: number;
+    onlyMissingGoogle?: boolean;
+    establishmentIds?: string[];
+  } = {};
   try {
     body = await request.json();
   } catch {
@@ -202,6 +279,13 @@ export async function POST(
   }
 
   const county = (body.county ?? "").trim();
+  const revenueMonth = (body.revenueMonth ?? "").trim();
+  const establishmentIds = Array.isArray(body.establishmentIds)
+    ? Array.from(new Set(body.establishmentIds.map((value) => String(value ?? "").trim()).filter(Boolean))).slice(0, 1000)
+    : [];
+  const minRevenueRaw = Number(body.minRevenue);
+  const minRevenue = Number.isFinite(minRevenueRaw) ? minRevenueRaw : undefined;
+  const onlyMissingGoogle = body.onlyMissingGoogle === true;
   const lookbackMonthsRaw = Number(body.lookbackMonths ?? 24);
   const lookbackMonths = Number.isFinite(lookbackMonthsRaw)
     ? Math.min(Math.max(Math.floor(lookbackMonthsRaw), 1), 24)
@@ -211,7 +295,7 @@ export async function POST(
   // Write a trigger doc to Firestore — the Cloud Function watches this collection
   const db = getAdminDb();
   if (preview) {
-    const previewResult = await buildPreview(db, job, county, lookbackMonths);
+    const previewResult = await buildPreview(db, job, county, lookbackMonths, revenueMonth || undefined, minRevenue, onlyMissingGoogle, establishmentIds);
     return NextResponse.json(previewResult);
   }
 
@@ -241,6 +325,10 @@ export async function POST(
     jobName: job,
     county: county || null,
     lookbackMonths,
+    revenueMonth: revenueMonth || null,
+    minRevenue: minRevenue ?? null,
+    onlyMissingGoogle,
+    establishmentIds,
     requestedAt: new Date(),
     status: "queued",
   });
