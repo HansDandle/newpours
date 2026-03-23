@@ -6,11 +6,10 @@ import { auth } from "@/lib/firebase";
 import { useAuth } from "./AuthProvider";
 
 export default function Navbar() {
-  const { user, loading, devSignOut } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
 
   const handleSignOut = async () => {
-    devSignOut();
     try { await signOut(auth); } catch { /* no-op if not signed in via Firebase */ }
     router.push("/");
   };

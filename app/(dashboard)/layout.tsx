@@ -11,6 +11,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Link href="/dashboard" className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition">
           📋 Alert Feed
         </Link>
+        <Link href="/explorer" className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition">
+          📊 Market Explorer
+        </Link>
         <Link href="/exports" className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition">
           📥 Exports
         </Link>

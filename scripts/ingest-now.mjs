@@ -52,6 +52,7 @@ console.log(`  ${existing.size} licenses already in Firestore.`);
 const { FieldValue } = await import('firebase-admin/firestore');
 
 let added = 0;
+let updated = 0;
 
 // ── 1. Pending applications ──────────────────────────────────────────────────
 console.log('\nFetching pending applications...');
@@ -62,12 +63,14 @@ console.log(`  Got ${pendingData.length} pending application records.`);
 
 for (const record of pendingData) {
   const id = `app-${record.applicationid}`;
-  if (!record.applicationid || existing.has(id)) continue;
-  await db.collection('licenses').doc(id).set({
+  if (!record.applicationid) continue;
+  const isExisting = existing.has(id);
+  const payload = {
     licenseNumber: id,
-    businessName: record.owner ?? '',
+    businessName: record.trade_name ?? record.owner ?? '',
     ownerName: record.owner ?? '',
     address: record.address ?? '',
+    address2: record.address_2 ?? '',
     city: record.city ?? '',
     county: record.county ?? '',
     zipCode: (record.zip ?? '').slice(0, 5),
@@ -77,25 +80,43 @@ for (const record of pendingData) {
     applicationDate: record.submission_date ?? null,
     effectiveDate: null,
     expirationDate: null,
-    // Used for deduplication: when a license_id matching this appears in issued data, delete this doc
+    tradeName: record.trade_name ?? '',
+    phone: record.phone ?? '',
+    winePercent: record.wine_percent ?? '',
+    masterFileId: record.master_file_id ?? null,
+    subordinateLicenseId: record.subordinate_license_id ?? null,
     primaryLicenseId: record.primary_license_id ?? null,
-    isNew: true,
-    firstSeenAt: FieldValue.serverTimestamp(),
-  });
-  added++;
-  process.stdout.write(`\r  Added ${added} records...`);
+  };
+  await db.collection('licenses').doc(id).set(
+    isExisting
+      ? payload
+      : {
+          ...payload,
+          isNew: true,
+          firstSeenAt: FieldValue.serverTimestamp(),
+        },
+    { merge: true }
+  );
+  if (isExisting) {
+    updated++;
+  } else {
+    added++;
+  }
+  process.stdout.write(`\r  Added ${added} records, updated ${updated}...`);
 }
 
 // ── 2. Issued licenses ───────────────────────────────────────────────────────
 console.log('\n\nFetching issued licenses...');
 for (const record of data) {
   const id = `lic-${record.license_id}`;
-  if (!record.license_id || existing.has(id)) continue;
-  await db.collection('licenses').doc(id).set({
+  if (!record.license_id) continue;
+  const isExisting = existing.has(id);
+  const payload = {
     licenseNumber: id,
     businessName: record.trade_name ?? '',
     ownerName: record.owner ?? '',
     address: record.address ?? '',
+    address2: record.address_2 ?? '',
     city: record.city ?? '',
     county: record.county ?? '',
     zipCode: (record.zip ?? '').slice(0, 5),
@@ -103,17 +124,37 @@ for (const record of data) {
     licenseTypeLabel: record.tier ?? '',
     status: record.primary_status ?? '',
     tradeName: record.trade_name ?? '',
+    phone: record.phone ?? '',
+    winePercent: record.wine_percent ?? '',
+    legacyClp: record.legacy_clp ?? '',
+    secondaryStatus: record.secondary_status ?? '',
+    subordinates: record.subordinates ?? '',
+    statusChangeDate: record.status_change_date ?? null,
+    masterFileId: record.master_file_id ?? null,
     mailAddress: record.mail_address ?? '',
+    mailAddress2: record.mail_address_2 ?? '',
     mailCity: record.mail_city ?? '',
     mailZip: (record.mail_zip ?? '').slice(0, 5),
     applicationDate: record.current_issued_date ?? null,
     effectiveDate: record.current_issued_date ?? null,
     expirationDate: record.expiration_date ?? null,
-    isNew: true,
-    firstSeenAt: FieldValue.serverTimestamp(),
-  });
-  added++;
-  process.stdout.write(`\r  Added ${added} records...`);
+  };
+  await db.collection('licenses').doc(id).set(
+    isExisting
+      ? payload
+      : {
+          ...payload,
+          isNew: true,
+          firstSeenAt: FieldValue.serverTimestamp(),
+        },
+    { merge: true }
+  );
+  if (isExisting) {
+    updated++;
+  } else {
+    added++;
+  }
+  process.stdout.write(`\r  Added ${added} records, updated ${updated}...`);
 }
 
 // ── 3. Deduplication: remove pending apps that now have an issued license ────
@@ -133,11 +174,12 @@ for (const doc of pendingSnap.docs) {
 if (deduped) console.log(`  Removed ${deduped} pending apps that now have an issued license.`);
 else console.log('  No duplicates found.');
 
-console.log(`\nDone. Added ${added} new licenses.`);
+console.log(`\nDone. Added ${added} new licenses and updated ${updated} existing licenses.`);
 
 await db.collection('runs').add({
   type: 'ingest-manual',
   count: added,
+  updatedCount: updated,
   at: FieldValue.serverTimestamp(),
 });
 process.exit(0);

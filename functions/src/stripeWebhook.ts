@@ -12,7 +12,7 @@ const PLAN_MAP: Record<string, string> = {
 };
 
 export const stripeWebhook = functions.https.onRequest(async (req, res) => {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2026-02-25.clover' });
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-02-24.acacia' });
   const sig = req.headers['stripe-signature'] as string;
 
   let event: Stripe.Event;

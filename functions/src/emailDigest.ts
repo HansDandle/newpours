@@ -1,21 +1,20 @@
-import * as functions from 'firebase-functions';
+import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { Resend } from 'resend';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
-export const sendDailyDigest = functions.pubsub
-  .schedule('0 * * * *') // Every hour
-  .timeZone('America/Chicago')
-  .onRun(async () => {
+export const sendDailyDigest = onSchedule(
+  '0 * * * *',
+  async () => {
     const resend = new Resend(process.env.RESEND_API_KEY);
     const now = new Date();
     const hour = now.getHours();
 
     const hourMap: Record<number, string> = { 6: '6am', 8: '8am', 12: '12pm' };
     const currentSlot = hourMap[hour];
-    if (!currentSlot) return null;
+    if (!currentSlot) return;
 
     const usersSnap = await db.collection('users')
       .where('emailDigest', '==', true)
@@ -51,5 +50,6 @@ export const sendDailyDigest = functions.pubsub
       await batch.commit();
     }
 
-    return null;
-  });
+    return;
+  }
+);

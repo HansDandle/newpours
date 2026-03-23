@@ -1,13 +1,26 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Helpers
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == 'admin';
+    }
+
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+      // Admins can read any user doc
+      allow read: if isAdmin();
     }
     match /licenses/{licenseNumber} {
       // All authenticated users can read; writes are admin-SDK only (ingest)
       allow read: if request.auth != null;
       allow write: if false;
+    }
+    match /establishments/{id} {
+      // All authenticated users can read enriched records
+      allow read: if request.auth != null;
+      // Writes only via admin SDK or admin-claimed users
+      allow write: if isAdmin();
     }
     match /alerts/{alertId} {
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
@@ -19,6 +32,14 @@ service cloud.firestore {
     }
     match /runs/{runId} {
       allow read, write: if false;
+    }
+
+    // Admin-only collections
+    match /system/{document=**} {
+      allow read, write: if isAdmin();
+    }
+    match /comptroller_unmatched/{document=**} {
+      allow read, write: if isAdmin();
     }
   }
 }
