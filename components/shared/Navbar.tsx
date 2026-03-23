@@ -16,8 +16,9 @@ export default function Navbar() {
 
   return (
     <nav className="w-full py-4 px-8 flex justify-between items-center bg-[#1a2233] text-white shadow-md">
-      <Link href="/" className="text-xl font-bold tracking-tight text-amber-400 hover:text-amber-300 transition">
-        NewPours
+      <Link href="/" className="flex items-center gap-3 text-xl font-bold tracking-tight text-amber-400 hover:text-amber-300 transition">
+        <img src="/branding/pourscout_sm_logo.png" alt="PourScout" className="h-8 w-auto" />
+        <span>PourScout</span>
       </Link>
       <div className="flex gap-8 text-sm font-medium items-center">
         {!loading && (

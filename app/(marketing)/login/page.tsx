@@ -18,7 +18,7 @@ export default function LoginPage() {
   return (
     <section className="min-h-[80vh] flex flex-col items-center justify-center gap-6">
       <div className="bg-white rounded-2xl shadow-lg p-10 flex flex-col items-center gap-4 border border-gray-100 max-w-sm w-full">
-        <span className="text-3xl font-bold text-[#1a2233]">NewPours</span>
+        <span className="text-3xl font-bold text-[#1a2233]">PourScout</span>
         <p className="text-gray-500 text-sm text-center">Sign in to access your TABC license alerts dashboard.</p>
         <button
           className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:border-amber-400 text-gray-700 font-medium px-6 py-3 rounded-lg shadow-sm transition"

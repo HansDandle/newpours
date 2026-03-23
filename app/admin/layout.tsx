@@ -21,7 +21,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="text-xs font-bold uppercase tracking-widest text-gray-500">
               Admin
             </span>
-            <p className="text-sm font-semibold text-amber-400 mt-1">NewPours</p>
+            <p className="text-sm font-semibold text-amber-400 mt-1">PourScout</p>
           </div>
           <nav className="flex flex-col gap-0.5 px-2">
             {NAV_ITEMS.map((item) => (

@@ -11,13 +11,17 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Guard: skip initialization during build when env vars aren't present.
-// At runtime (browser + Vercel server) the vars are always set.
-const app = process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+// Initialize only in the browser and when NEXT_PUBLIC env vars are present.
+// This avoids calling Firebase during server-side rendering or in toolchains
+// (like Turbopack) where `process.env` may be undefined at module-eval time.
+const isBrowser = typeof window !== 'undefined';
+const hasPublicKey = Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY);
+
+const app = isBrowser && hasPublicKey
   ? (getApps().length ? getApps()[0] : initializeApp(firebaseConfig))
   : null;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const auth = app ? getAuth(app) : null as any;
+export const auth = (isBrowser && app) ? getAuth(app) : null as any;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const db = app ? getFirestore(app) : null as any;
+export const db = (isBrowser && app) ? getFirestore(app) : null as any;
