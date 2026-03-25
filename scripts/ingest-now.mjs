@@ -37,10 +37,10 @@ const db = getFirestore();
 // ── Ingest ───────────────────────────────────────────────────────────────────
 const TABC_ISSUED_API  = 'https://data.texas.gov/resource/7hf9-qc9f.json';
 const TABC_PENDING_API = 'https://data.texas.gov/resource/mxm5-tdpj.json';
-const LIMIT = 500; // keep it small for a manual test run
+const LIMIT = 10000; // fetch the most recently issued records statewide
 
-console.log(`Fetching up to ${LIMIT} records from TABC API...`);
-const res = await fetch(`${TABC_ISSUED_API}?$limit=${LIMIT}`);
+console.log(`Fetching up to ${LIMIT} issued licenses from TABC API (ordered by most recent)...`);
+const res = await fetch(`${TABC_ISSUED_API}?$limit=${LIMIT}&$order=current_issued_date DESC`);
 if (!res.ok) throw new Error(`TABC API error: ${res.status} ${res.statusText}`);
 const data = await res.json();
 console.log(`  Got ${data.length} records.`);
@@ -113,7 +113,7 @@ for (const record of data) {
   const isExisting = existing.has(id);
   const payload = {
     licenseNumber: id,
-    businessName: record.trade_name ?? '',
+    businessName: record.trade_name ?? record.owner ?? '',
     ownerName: record.owner ?? '',
     address: record.address ?? '',
     address2: record.address_2 ?? '',
@@ -135,9 +135,21 @@ for (const record of data) {
     mailAddress2: record.mail_address_2 ?? '',
     mailCity: record.mail_city ?? '',
     mailZip: (record.mail_zip ?? '').slice(0, 5),
+    originalIssueDate: record.original_issue_date ?? null,
     applicationDate: record.current_issued_date ?? null,
     effectiveDate: record.current_issued_date ?? null,
     expirationDate: record.expiration_date ?? null,
+    newEstablishmentClassification: (() => {
+      const sec = (record.secondary_status ?? '').toLowerCase();
+      if (sec.includes('renew')) return 'RENEWAL';
+      if (sec.includes('transfer') || sec.includes('change')) return 'TRANSFER_OR_CHANGE';
+      const orig = record.original_issue_date ? new Date(record.original_issue_date).getTime() : null;
+      const curr = record.current_issued_date ? new Date(record.current_issued_date).getTime() : null;
+      const delta = (orig && curr) ? Math.abs(curr - orig) / 86400000 : null;
+      if (delta !== null && delta > 120) return 'RENEWAL';
+      if (!record.original_issue_date || delta === 0) return 'TRULY_NEW';
+      return 'UNKNOWN';
+    })(),
   };
   await db.collection('licenses').doc(id).set(
     isExisting
@@ -158,15 +170,28 @@ for (const record of data) {
 }
 
 // ── 3. Deduplication: remove pending apps that now have an issued license ────
+// Case A (renewals): pending.primaryLicenseId matches an issued license_id.
+// Case B (new apps): pending.masterFileId matches an issued master_file_id.
 console.log('\n\nDeduplicating pending apps vs issued licenses...');
 const pendingSnap = await db.collection('licenses')
   .where('licenseTypeLabel', '==', 'Pending Application')
   .get();
-const issuedIds = new Set(data.map(r => r.license_id).filter(Boolean));
+const issuedLicenseIds = new Set(data.map(r => r.license_id).filter(Boolean));
+const issuedMasterFileIds = new Set(data.map(r => r.master_file_id).filter(Boolean));
+// Fallback: match on owner + county + licenseType for permits without a master_file_id (e.g. NT)
+const issuedOwnerKeys = new Set(
+  data
+    .map(r => `${(r.owner ?? '').trim().toLowerCase()}::${(r.county ?? '').trim().toLowerCase()}::${(r.license_type ?? '').trim().toLowerCase()}`)
+    .filter(k => !k.startsWith('::'))
+);
 let deduped = 0;
 for (const doc of pendingSnap.docs) {
-  const pid = doc.data().primaryLicenseId;
-  if (pid && issuedIds.has(pid)) {
+  const d = doc.data();
+  const byRenewal = d.primaryLicenseId && issuedLicenseIds.has(d.primaryLicenseId);
+  const byMasterFile = d.masterFileId && issuedMasterFileIds.has(d.masterFileId);
+  const ownerKey = `${(d.ownerName ?? '').trim().toLowerCase()}::${(d.county ?? '').trim().toLowerCase()}::${(d.licenseType ?? '').trim().toLowerCase()}`;
+  const byOwner = !d.masterFileId && ownerKey.length > 2 && issuedOwnerKeys.has(ownerKey);
+  if (byRenewal || byMasterFile || byOwner) {
     await doc.ref.delete();
     deduped++;
   }

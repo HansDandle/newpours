@@ -7,6 +7,7 @@ import { useAuth } from "@/components/shared/AuthProvider";
 
 const JOBS = [
   { key: "tabc_ingest", label: "TABC Ingest" },
+  { key: "dedup_pending", label: "Clean Up Stale Pending" },
   { key: "comptroller_update", label: "Comptroller Update" },
   { key: "google_places_refresh", label: "Google Places Refresh" },
   { key: "health_inspections", label: "Health Inspections" },
@@ -364,7 +365,7 @@ export default function AdminJobsPage() {
               >
                 {previewing === confirmJob ? "Previewing…" : "Preview Impact"}
               </button>
-              <button onClick={() => triggerJob(confirmJob)} className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded">Run now</button>
+              <button onClick={() => triggerJob(confirmJob)} className="btn-accent px-3 py-1.5 text-sm rounded">Run now</button>
             </div>
           </div>
         </div>

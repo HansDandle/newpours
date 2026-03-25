@@ -100,7 +100,7 @@ export default function UnmatchedQueuePage() {
         placeholder="Search taxpayer name, address…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="mb-5 bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-80 focus:outline-none focus:ring-1 focus:ring-amber-500"
+        className="mb-5 bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-80 focus:outline-none focus:ring-1 focus:ring-[var(--brand-accent)]"
       />
 
       {loading ? (
@@ -196,7 +196,7 @@ export default function UnmatchedQueuePage() {
               placeholder="Search by name, address, license #…"
               value={estSearch}
               onChange={(e) => { setEstSearch(e.target.value); searchEstablishments(e.target.value); }}
-              className="w-full bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 mb-3 focus:outline-none focus:ring-1 focus:ring-amber-500"
+              className="w-full bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 mb-3 focus:outline-none focus:ring-1 focus:ring-[var(--brand-accent)]"
               autoFocus
             />
             {estLoading && <p className="text-xs text-gray-500">Searching…</p>}

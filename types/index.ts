@@ -9,7 +9,23 @@ export type EstablishmentClassification =
   | 'PENDING_NEW'
   | 'RENEWAL'
   | 'TRANSFER_OR_CHANGE'
+  | 'REOPENED'
   | 'UNKNOWN';
+
+/**
+ * Vendor opportunity signals computed nightly on each establishment.
+ * Surfaced as Explorer filter options for distributors, staffing, POS vendors, etc.
+ */
+export type VendorSignal =
+  | 'new_establishment'       // TRULY_NEW or PENDING_NEW — no vendor relationships yet
+  | 'reopened'                // REOPENED — fresh start, likely new ownership
+  | 'ownership_change'        // TRANSFER_OR_CHANGE — new owner reviewing all contracts
+  | 'license_upgrade'         // License type changed to allow new product categories
+  | 'special_event_license'   // Temporary/event license — needs event staffing, temp equipment
+  | 'revenue_spike'           // Month-over-month revenue >30% increase
+  | 'major_renovation'        // Building permit > $50K — new POS, equipment, decor
+  | 'health_violation'        // Critical health violations — may need new suppliers
+  | 'expiring_soon';          // License expires within 60 days — compliance/insurance opportunity
 
 export interface User {
   uid: string;
@@ -29,6 +45,7 @@ export interface User {
   emailDigest: boolean;
   digestTime: DigestTime;
   includeRenewals?: boolean;
+  lastExportAt?: any; // Firestore Timestamp — used for export rate limiting
 }
 
 export interface License {
@@ -43,6 +60,7 @@ export interface License {
   licenseType: string;
   licenseTypeLabel: string;
   status: string;
+  originalIssueDate?: string | null;
   applicationDate: any;
   effectiveDate?: any;
   expirationDate?: any;
@@ -68,6 +86,8 @@ export interface License {
   newEstablishmentClassification?: EstablishmentClassification;
   newEstablishmentConfidence?: number;
   newEstablishmentReason?: string;
+  /** Computed nightly. Machine-readable signals useful to vendors (distributors, staffing, etc.) */
+  vendorSignals?: VendorSignal[];
 }
 
 export interface Alert {

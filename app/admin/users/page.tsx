@@ -17,11 +17,11 @@ interface UserRow {
 const PLAN_PRICES: Record<string, number> = { free: 0, basic: 29, pro: 79, enterprise: 299 };
 
 const planBadge = (plan: string) => {
-  const map: Record<string, string> = {
+    const map: Record<string, string> = {
     free: "bg-gray-700 text-gray-300",
     basic: "bg-blue-900 text-blue-300",
     pro: "bg-purple-900 text-purple-300",
-    enterprise: "bg-amber-900 text-amber-300",
+    enterprise: "bg-[rgba(200,169,108,0.12)] text-[var(--brand-accent)]",
   };
   return map[plan] ?? "bg-gray-700 text-gray-300";
 };
@@ -86,7 +86,7 @@ export default function AdminUsersPage() {
           placeholder="Search email or name…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-72 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className="bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-72 focus:outline-none focus:ring-1 focus:ring-[var(--brand-accent)]"
         />
         <select
           value={planFilter}

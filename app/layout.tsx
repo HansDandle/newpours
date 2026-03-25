@@ -5,8 +5,12 @@ import Footer from "../components/shared/Footer";
 import { AuthProvider } from "../components/shared/AuthProvider";
 
 export const metadata: Metadata = {
-  title: 'NewPours — TABC License Alerts',
+  title: 'PourScout — TABC License Alerts',
   description: 'Real-time TABC license alerts for Texas vendors.',
+  icons: {
+    icon: '/branding/pourscout_sm_logo.png',
+    apple: '/branding/pourscout_sm_logo.png',
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

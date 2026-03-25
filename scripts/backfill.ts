@@ -310,6 +310,9 @@ async function phase1_tabcIngest() {
           status: r.applicationstatus ?? "Pending",
           applicationDate: r.submission_date ?? null,
           phone: r.phone ?? "",
+          mailAddress: r.mail_address ?? "",
+          mailCity: r.mail_city ?? "",
+          mailZip: (r.mail_zip ?? "").slice(0, 5),
           enrichment: {
             googlePlaces: "pending",
             comptroller: "pending",

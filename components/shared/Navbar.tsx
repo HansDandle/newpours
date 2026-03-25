@@ -15,27 +15,29 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="w-full py-4 px-8 flex justify-between items-center bg-[#1a2233] text-white shadow-md">
-      <Link href="/" className="text-xl font-bold tracking-tight text-amber-400 hover:text-amber-300 transition">
-        NewPours
+    <nav className="w-full py-4 px-8 flex justify-between items-center bg-brand text-on-dark shadow-md">
+      <Link href="/" className="flex items-center gap-4 text-xl font-bold tracking-tight accent hover:opacity-90 transition text-on-dark">
+        <img src="/branding/pourscout_sm_logo.png" alt="PourScout" className="h-10 md:h-12 lg:h-14 w-auto" />
+        <span className="text-brand">PourScout</span>
       </Link>
       <div className="flex gap-8 text-sm font-medium items-center">
         {!loading && (
           <>
             {user ? (
               <>
-                <Link href="/dashboard" className="hover:text-amber-400 transition">Dashboard</Link>
+                <Link href="/dashboard" className="hover:accent transition text-on-dark">Dashboard</Link>
                 <button
                   onClick={handleSignOut}
-                  className="bg-amber-500 hover:bg-amber-400 text-white px-4 py-2 rounded-lg transition"
+                  className="btn-accent px-4 py-2 rounded-lg transition"
                 >
                   Sign Out
                 </button>
               </>
             ) : (
               <>
-                <Link href="/pricing" className="hover:text-amber-400 transition">Pricing</Link>
-                <Link href="/login" className="bg-amber-500 hover:bg-amber-400 text-white px-4 py-2 rounded-lg transition">Sign In</Link>
+                <Link href="/pricing" className="hover:accent transition text-on-dark">Pricing</Link>
+                <Link href="/login" className="hover:accent transition text-on-dark">Sign In</Link>
+                <Link href="/signup?plan=pro" className="btn-accent px-4 py-2 rounded-lg transition">Get Started</Link>
               </>
             )}
           </>

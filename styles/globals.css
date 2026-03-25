@@ -5,3 +5,34 @@
 body {
   font-family: 'DM Sans', 'Geist', sans-serif;
 }
+
+/* Use brand dark background globally and readable brand text */
+body {
+  background-color: var(--brand-bg);
+  color: var(--brand-text);
+}
+
+:root {
+  --brand-bg: #131210;
+  --brand-accent: #c8a96c;
+  --brand-text: #f1e6d4;
+  --brand-text-on-light: #6a4e27;
+  --brand-green: #497a39;
+  --brand-red: #a53722;
+}
+
+/* Simple utility classes that use the brand variables */
+.bg-brand { background-color: var(--brand-bg); }
+.text-brand { color: var(--brand-text); }
+.accent { color: var(--brand-accent); }
+.btn-accent { background-color: var(--brand-accent); color: var(--brand-bg); }
+.btn-accent:hover { filter: brightness(0.95); }
+
+/* Explicit helper for text on dark backgrounds */
+.text-on-dark { color: var(--brand-text); }
+/* Explicit helper for text on light backgrounds */
+.text-on-light { color: var(--brand-text-on-light); }
+
+/* Small helper for semi-transparent dark overlays using brand bg */
+.brand-overlay { background-color: rgba(19,18,16,0.6); }
+

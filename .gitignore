@@ -59,6 +59,9 @@ node_modules/
 # Output of 'npm pack'
 *.tgz
 
+# big data
+*.zip
+
 # Yarn Integrity file
 .yarn-integrity
 

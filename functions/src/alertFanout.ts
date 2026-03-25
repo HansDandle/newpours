@@ -5,10 +5,17 @@ import fetch from 'node-fetch';
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
 
-type LicenseClassification = 'TRULY_NEW' | 'PENDING_NEW' | 'RENEWAL' | 'TRANSFER_OR_CHANGE' | 'UNKNOWN';
+type LicenseClassification = 'TRULY_NEW' | 'PENDING_NEW' | 'RENEWAL' | 'TRANSFER_OR_CHANGE' | 'REOPENED' | 'UNKNOWN';
 
 function isTrulyNewClassification(classification?: string): boolean {
-  return classification === 'TRULY_NEW' || classification === 'PENDING_NEW';
+  // TRANSFER_OR_CHANGE included: ownership transfers mean a new decision-maker reviewing
+  // all vendor relationships — equally valuable to vendors as a brand-new establishment.
+  return (
+    classification === 'TRULY_NEW' ||
+    classification === 'PENDING_NEW' ||
+    classification === 'REOPENED' ||
+    classification === 'TRANSFER_OR_CHANGE'
+  );
 }
 
 export const alertFanout = onDocumentCreated('licenses/{licenseNumber}', async (event) => {

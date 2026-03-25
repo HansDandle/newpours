@@ -122,15 +122,24 @@ async function enrichWithGooglePlaces(
   address: string,
   city: string,
   mapsApiKey: string,
-  zipCode?: string
+  zipCode?: string,
+  mailAddress?: string,
+  mailCity?: string,
 ): Promise<'complete' | 'no_match'> {
   const queries = [
     `${businessName} ${address} ${city} Texas`,
     `${businessName} ${city} Texas`,
     `${businessName} ${address} Texas`,
   ];
+  // Fallback: try mailing address (useful for event/temp permits where venue is a park)
+  const mailQueries: string[] = [];
+  if (mailAddress && mailCity) {
+    mailQueries.push(`${businessName} ${mailAddress} ${mailCity}`);
+    mailQueries.push(`${businessName} ${mailCity}`);
+  }
 
   let searchData: any = null;
+  let matchedVia: 'venue' | 'mail' = 'venue';
   for (const query of queries) {
     const searchRes = await fetch(
       `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${mapsApiKey}`
@@ -149,6 +158,26 @@ async function enrichWithGooglePlaces(
     }
   }
 
+  // If venue address queries failed, try mailing address queries
+  if (!searchData?.results?.length && mailQueries.length > 0) {
+    for (const query of mailQueries) {
+      const searchRes = await fetch(
+        `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${mapsApiKey}`
+      );
+      const candidate = await searchRes.json();
+      const status = String(candidate?.status ?? 'UNKNOWN_ERROR');
+      if (status === 'REQUEST_DENIED' || status === 'OVER_DAILY_LIMIT' || status === 'OVER_QUERY_LIMIT' || status === 'INVALID_REQUEST') {
+        const message = candidate?.error_message ? `${status}: ${candidate.error_message}` : status;
+        throw new Error(`Google Places Text Search failed (${message})`);
+      }
+      if (Array.isArray(candidate?.results) && candidate.results.length > 0) {
+        searchData = candidate;
+        matchedVia = 'mail';
+        break;
+      }
+    }
+  }
+
   if (!searchData?.results?.length) {
     await db.doc(`establishments/${docId}`).set(
       { 'enrichment.googlePlaces': 'no_match' },
@@ -164,7 +193,10 @@ async function enrichWithGooglePlaces(
       const placeName: string = candidate.name ?? '';
       const placeAddress: string = candidate.formatted_address ?? '';
       const nameSim = nameSimilarity(businessName, placeName);
-      const addrSim = addrSimilarity(address, placeAddress);
+      // When matched via mailing address, score address similarity against the mail address
+      // (not the venue address, which may be a park in a different city).
+      const compareAddress = matchedVia === 'mail' ? (mailAddress ? `${mailAddress} ${mailCity}` : address) : address;
+      const addrSim = addrSimilarity(compareAddress, placeAddress);
       const confidence = nameSim * 0.6 + addrSim * 0.4;
       const placeZip = (placeAddress.match(/\b(\d{5})\b/) ?? [])[1] ?? '';
       return { candidate, placeName, placeAddress, nameSim, addrSim, confidence, placeZip };
@@ -176,15 +208,20 @@ async function enrichWithGooglePlaces(
   const placeName: string = best.placeName;
   const confidence = best.confidence;
 
-  // Override: zip match + strong signals is sufficient regardless of overall confidence
-  const estZip = (zipCode ?? '').trim();
+  // Override: zip match + strong signals is sufficient regardless of overall confidence.
+  // For mail matches, use the mail zip code for the zip override check.
+  const checkZip = matchedVia === 'mail' ? ((zipCode ?? '').trim() || '') : (zipCode ?? '').trim();
+  const estZip = checkZip;
   const zipMatch = estZip.length === 5 && best.placeZip === estZip;
   const exactNameMatch = best.nameSim >= 0.99;
   const sameAddress = best.addrSim >= 0.80;
   // Accept if: (exact name + zip) OR (same address + zip) — different business name branding is common
   const overrideThreshold = zipMatch && (exactNameMatch || sameAddress);
 
-  if (!overrideThreshold && confidence < CONFIDENCE_THRESHOLD) {
+  // When matching via mailing address the business name may differ from the venue name,
+  // so use a lower confidence threshold and name-only matching.
+  const effectiveThreshold = matchedVia === 'mail' ? 0.3 : CONFIDENCE_THRESHOLD;
+  if (!overrideThreshold && confidence < effectiveThreshold) {
     await db.doc(`establishments/${docId}`).set(
       { 'enrichment.googlePlaces': 'no_match' },
       { merge: true }
@@ -223,6 +260,7 @@ async function enrichWithGooglePlaces(
     lat: detail.geometry?.location?.lat ?? top.geometry?.location?.lat ?? null,
     lng: detail.geometry?.location?.lng ?? top.geometry?.location?.lng ?? null,
     confidence,
+    matchedVia,
     matchedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
 
@@ -248,7 +286,7 @@ async function enrichWithGooglePlaces(
   }
 
   await db.doc(`establishments/${docId}`).set(updates, { merge: true });
-  await logEnrichment(docId, 'googlePlaces', 'success', `Matched: ${placeName}`, confidence, 'name+address');
+  await logEnrichment(docId, 'googlePlaces', 'success', `Matched: ${placeName} (via ${matchedVia} address)`, confidence, 'name+address');
   return 'complete';
 }
 
@@ -291,6 +329,23 @@ export async function enrichGooglePlacesForEstablishment(
   const address = String(estData.address ?? '').trim();
   const city = String(estData.city ?? '').trim();
   const zipCode = String(estData.zipCode ?? '').trim();
+  let mailAddress = String(estData.mailAddress ?? '').trim();
+  let mailCity = String(estData.mailCity ?? '').trim();
+
+  // Pending application establishments docs are created by the backfill without mail address.
+  // Fall back to the licenses collection (same doc ID) which may have it from the ingest.
+  if (!mailAddress || !mailCity) {
+    try {
+      const licSnap = await db.doc(`licenses/${establishmentId}`).get();
+      if (licSnap.exists) {
+        const licData = licSnap.data() ?? {};
+        if (!mailAddress) mailAddress = String(licData.mailAddress ?? '').trim();
+        if (!mailCity) mailCity = String(licData.mailCity ?? '').trim();
+      }
+    } catch {
+      // non-fatal — continue without mail address
+    }
+  }
 
   if (!mapsApiKey) {
     await db.doc(`establishments/${establishmentId}`).set(
@@ -311,7 +366,7 @@ export async function enrichGooglePlacesForEstablishment(
   }
 
   try {
-    return await enrichWithGooglePlaces(establishmentId, businessName, address, city, mapsApiKey, zipCode);
+    return await enrichWithGooglePlaces(establishmentId, businessName, address, city, mapsApiKey, zipCode, mailAddress, mailCity);
   } catch (e: any) {
     console.error('Google Places enrichment failed:', e);
     await logEnrichment(establishmentId, 'googlePlaces', 'error', e?.message ?? String(e));
@@ -367,8 +422,11 @@ export async function runGooglePlacesJob(options?: {
     const estCounty = String(data.county ?? '').trim().toLowerCase();
     if (countyFilter && estCounty !== countyFilter) continue;
 
-    const recordDate = toDate(data.applicationDate) ?? toDate(data.firstSeenAt) ?? toDate(data.effectiveDate);
-    if (recordDate && recordDate < since) continue;
+    // Skip the date filter when targeting specific IDs — the caller explicitly wants those docs enriched.
+    if (!establishmentIdSet) {
+      const recordDate = toDate(data.applicationDate) ?? toDate(data.firstSeenAt) ?? toDate(data.effectiveDate);
+      if (recordDate && recordDate < since) continue;
+    }
 
     if (onlyMissingGoogle) {
       const currentGoogleStatus = String(data.enrichment?.googlePlaces ?? data['enrichment.googlePlaces'] ?? '').trim().toLowerCase();

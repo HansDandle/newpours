@@ -7,7 +7,18 @@ const adminDb = admin.firestore();
 const TABC_ISSUED_API  = 'https://data.texas.gov/resource/7hf9-qc9f.json';
 const TABC_PENDING_API = 'https://data.texas.gov/resource/mxm5-tdpj.json';
 
-type EstablishmentClassification = 'TRULY_NEW' | 'PENDING_NEW' | 'RENEWAL' | 'TRANSFER_OR_CHANGE' | 'UNKNOWN';
+type EstablishmentClassification = 'TRULY_NEW' | 'PENDING_NEW' | 'RENEWAL' | 'TRANSFER_OR_CHANGE' | 'REOPENED' | 'UNKNOWN';
+
+/** Normalizes an owner name or address to a stable lookup key. */
+function normalizeKey(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave').replace(/\bdrive\b/g, 'dr')
+    .replace(/\bboulevard\b/g, 'blvd').replace(/\broad\b/g, 'rd').replace(/\blane\b/g, 'ln')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function daysBetween(a?: string, b?: string): number | null {
   if (!a || !b) return null;
@@ -37,7 +48,19 @@ function classifyPending(record: Record<string, string>): {
   };
 }
 
-function classifyIssued(record: Record<string, string>): {
+interface IssuedContext {
+  /** Set of "normalizedAddress::licenseType" keys from the full API pull */
+  addressTypeHistory: Set<string>;
+  /** Set of "normalizedOwner::licenseType" keys from the full API pull */
+  ownerTypeHistory: Set<string>;
+  /** The license_id of the record being classified — excluded from history checks */
+  currentId: string;
+}
+
+function classifyIssued(
+  record: Record<string, string>,
+  context?: IssuedContext,
+): {
   newEstablishmentClassification: EstablishmentClassification;
   newEstablishmentConfidence: number;
   newEstablishmentReason: string;
@@ -60,11 +83,40 @@ function classifyIssued(record: Record<string, string>): {
     };
   }
 
-  if (!record.original_issue_date || dayDelta === 0) {
+  // No original_issue_date at all → TABC has never previously issued a license for this entity.
+  // This is the strongest possible signal for a brand-new establishment; skip the history check
+  // because any address match in the batch would be a coincidence, not evidence of a reopen.
+  if (!record.original_issue_date) {
     return {
       newEstablishmentClassification: 'TRULY_NEW',
-      newEstablishmentConfidence: 0.9,
-      newEstablishmentReason: 'First-time issuance signal from issue dates',
+      newEstablishmentConfidence: 0.95,
+      newEstablishmentReason: 'No original issue date; TABC has never previously licensed this entity',
+    };
+  }
+
+  if (dayDelta === 0) {
+    // original_issue_date exists and equals current_issued_date → first issuance of this license,
+    // but the business may have had prior licenses at the same address under different IDs.
+    // Cross-check the in-memory batch history to detect reopens.
+    if (context) {
+      const addrKey  = `${normalizeKey(record.address ?? '')}::${record.license_type ?? ''}`;
+      const ownerKey = `${normalizeKey(record.owner ?? '')}::${record.license_type ?? ''}`;
+      const hasAddrHistory  = context.addressTypeHistory.has(addrKey);
+      const hasOwnerHistory = context.ownerTypeHistory.has(ownerKey);
+      if (hasAddrHistory || hasOwnerHistory) {
+        return {
+          newEstablishmentClassification: 'REOPENED',
+          newEstablishmentConfidence: 0.80,
+          newEstablishmentReason: hasAddrHistory
+            ? 'Prior license at same address + license type; likely new ownership or reopen'
+            : 'Prior license by same owner + license type; likely new ownership or reopen',
+        };
+      }
+    }
+    return {
+      newEstablishmentClassification: 'TRULY_NEW',
+      newEstablishmentConfidence: 0.85,
+      newEstablishmentReason: 'First-time issuance; no prior address or owner history found in current dataset',
     };
   }
 
@@ -82,7 +134,8 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
   let updatedCount = 0;
 
   // 1. Pending applications
-  const pendingRes = await fetch(`${TABC_PENDING_API}?$limit=10000`);
+  // Order by submission_date DESC so we always fetch the most recently filed applications.
+  const pendingRes = await fetch(`${TABC_PENDING_API}?$limit=10000&$order=submission_date DESC`);
   const pendingData = await pendingRes.json() as Record<string, string>[];
   for (const record of pendingData) {
     const id = `app-${record.applicationid}`;
@@ -126,17 +179,44 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
     else count++;
   }
 
-  // 2. Issued licenses
-  const issuedRes = await fetch(`${TABC_ISSUED_API}?$limit=10000`);
+  // 2. Issued licenses — order by current_issued_date DESC so the 10,000 most recently
+  // issued licenses are fetched. Without ordering, the API returns records in an arbitrary
+  // internal order and recent county-level records (e.g. Travis) may be entirely missed.
+  const issuedRes = await fetch(`${TABC_ISSUED_API}?$limit=10000&$order=current_issued_date DESC`);
   const issuedData = await issuedRes.json() as Record<string, string>[];
+
+  // Build in-memory history maps for cross-referencing first-time vs reopen.
+  // Each map key is "normalizedValue::licenseType". We collect ALL records first
+  // so that when classifying record X we can see if any *other* record shares
+  // the same address or owner+licenseType (indicating a prior/parallel presence).
+  const addressTypeHistory = new Set<string>();
+  const ownerTypeHistory   = new Set<string>();
+  for (const r of issuedData) {
+    if (!r.license_id) continue;
+    const addrKey  = `${normalizeKey(r.address ?? '')}::${r.license_type ?? ''}`;
+    const ownerKey = `${normalizeKey(r.owner ?? '')}::${r.license_type ?? ''}`;
+    addressTypeHistory.add(addrKey);
+    ownerTypeHistory.add(ownerKey);
+  }
+
   for (const record of issuedData) {
     const id = `lic-${record.license_id}`;
     if (!record.license_id) continue;
     const isExisting = existing.has(id);
-    const classification = classifyIssued(record);
+    // Remove this record's own keys before classifying so we don't
+    // flag it as "has history" just because it appears in the dataset itself.
+    const addrKeySelf  = `${normalizeKey(record.address ?? '')}::${record.license_type ?? ''}`;
+    const ownerKeySelf = `${normalizeKey(record.owner ?? '')}::${record.license_type ?? ''}`;
+    addressTypeHistory.delete(addrKeySelf);
+    ownerTypeHistory.delete(ownerKeySelf);
+    const context: IssuedContext = { addressTypeHistory, ownerTypeHistory, currentId: record.license_id };
+    const classification = classifyIssued(record, context);
+    // Restore keys for subsequent records that share the same address/owner
+    addressTypeHistory.add(addrKeySelf);
+    ownerTypeHistory.add(ownerKeySelf);
     const payload = {
       licenseNumber: id,
-      businessName: record.trade_name ?? '',
+      businessName: record.trade_name ?? record.owner ?? '',
       ownerName: record.owner ?? '',
       address: record.address ?? '',
       address2: record.address_2 ?? '',
@@ -158,6 +238,7 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
       mailAddress2: record.mail_address_2 ?? '',
       mailCity: record.mail_city ?? '',
       mailZip: (record.mail_zip ?? '').slice(0, 5),
+      originalIssueDate: record.original_issue_date ?? null,
       applicationDate: record.current_issued_date ?? null,
       effectiveDate: record.current_issued_date ?? null,
       expirationDate: record.expiration_date ?? null,
@@ -177,14 +258,28 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
     else count++;
   }
 
-  // 3. Deduplicate: remove pending apps that have now been issued a license
+  // 3. Deduplicate: remove pending apps that have now been issued a license.
+  //    Case A (renewals): pending.primaryLicenseId matches an issued license_id.
+  //    Case B (new apps): pending.masterFileId matches an issued master_file_id —
+  //      this catches apps like app-XXXXX that were approved and given a new lic-YYYYY.
   const pendingSnap = await adminDb.collection('licenses')
     .where('licenseTypeLabel', '==', 'Pending Application')
     .get();
-  const issuedIds = new Set(issuedData.map((r: Record<string, string>) => r.license_id).filter(Boolean));
+  const issuedLicenseIds = new Set(issuedData.map((r: Record<string, string>) => r.license_id).filter(Boolean));
+  const issuedMasterFileIds = new Set(issuedData.map((r: Record<string, string>) => r.master_file_id).filter(Boolean));
+  // Fallback: match on owner + county + licenseType for permits without a master_file_id (e.g. NT)
+  const issuedOwnerKeys = new Set(
+    issuedData
+      .map((r: Record<string, string>) => `${(r.owner ?? '').trim().toLowerCase()}::${(r.county ?? '').trim().toLowerCase()}::${(r.license_type ?? '').trim().toLowerCase()}`)
+      .filter(k => !k.startsWith('::'))
+  );
   for (const doc of pendingSnap.docs) {
-    const pid = doc.data().primaryLicenseId;
-    if (pid && issuedIds.has(pid)) await doc.ref.delete();
+    const d = doc.data();
+    const byRenewal = d.primaryLicenseId && issuedLicenseIds.has(d.primaryLicenseId);
+    const byMasterFile = d.masterFileId && issuedMasterFileIds.has(d.masterFileId);
+    const ownerKey = `${(d.ownerName ?? '').trim().toLowerCase()}::${(d.county ?? '').trim().toLowerCase()}::${(d.licenseType ?? '').trim().toLowerCase()}`;
+    const byOwner = !d.masterFileId && ownerKey.length > 2 && issuedOwnerKeys.has(ownerKey);
+    if (byRenewal || byMasterFile || byOwner) await doc.ref.delete();
   }
 
   // 4. Log run metadata

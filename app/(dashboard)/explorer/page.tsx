@@ -24,6 +24,9 @@ type ExplorerRow = {
   city?: string;
   zipCode?: string;
   address?: string;
+  mailAddress?: string;
+  mailCity?: string;
+  email?: string;
   applicationDate?: any;
   firstSeenAt?: any;
   classification?: string;
@@ -39,6 +42,7 @@ type ExplorerRow = {
     website?: string;
     priceLevel?: number;
     phoneNumber?: string;
+    matchedVia?: string;
     hours?: { weekday_text?: string[]; open_now?: boolean } | null;
   };
   comptroller?: {
@@ -184,6 +188,9 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
     city: raw.city,
     zipCode: raw.zipCode,
     address: raw.address,
+    mailAddress: raw.mailAddress,
+    mailCity: raw.mailCity,
+    email: raw.email,
     applicationDate: raw.applicationDate,
     firstSeenAt: raw.firstSeenAt,
     classification: raw.newEstablishmentClassification,
@@ -200,6 +207,7 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
       website: raw.googlePlaces?.website,
       priceLevel: raw.googlePlaces?.priceLevel,
       phoneNumber: raw.googlePlaces?.phoneNumber ?? raw.googlePlaces?.phone,
+      matchedVia: raw.googlePlaces?.matchedVia,
       hours: raw.googlePlaces?.hours ?? raw.googlePlaces?.openingHours ?? null,
     },
     comptroller: {
@@ -232,7 +240,7 @@ function StatusPill({ label, tone }: { label: string; tone: "neutral" | "good" |
   const styles = {
     neutral: "bg-slate-100 text-slate-700 border-slate-200",
     good: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    warn: "bg-amber-100 text-amber-700 border-amber-200",
+    warn: "bg-[rgba(200,169,108,0.08)] text-[var(--brand-accent)] border-[rgba(200,169,108,0.12)]",
     hot: "bg-rose-100 text-rose-700 border-rose-200",
   };
   return <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${styles[tone]}`}>{label}</span>;
@@ -249,13 +257,12 @@ function ExplorerCard({ title, value, meta }: { title: string; value: string; me
 }
 
 export default function ExplorerPage() {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [rows, setRows] = useState<ExplorerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [hydrated, setHydrated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [enrichingFiltered, setEnrichingFiltered] = useState(false);
   const [onlyMissingGoogle, setOnlyMissingGoogle] = useState(true);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
@@ -281,27 +288,30 @@ export default function ExplorerPage() {
     }
   }, [filters, hydrated]);
 
-  useEffect(() => {
-    const loadAdminClaim = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-      try {
-        const tokenResult = await user.getIdTokenResult(false);
-        setIsAdmin(tokenResult.claims.role === "admin");
-      } catch {
-        setIsAdmin(false);
-      }
-    };
+  // isAdmin comes from AuthProvider — no token read needed here.
 
-    loadAdminClaim();
-  }, [user]);
-
+  // Load establishments via shared sessionStorage cache (5-min TTL) to avoid redundant full-collection reads
   useEffect(() => {
+    const EST_CACHE_KEY = "newpours.establishments.cache.v1";
+    const EST_CACHE_TTL = 5 * 60 * 1000;
+    try {
+      const raw = sessionStorage.getItem(EST_CACHE_KEY);
+      if (raw) {
+        const { ts, data } = JSON.parse(raw) as { ts: number; data: RawRecord[] };
+        if (Date.now() - ts <= EST_CACHE_TTL) {
+          const nextRows = (data as RawRecord[]).map((d) => normalizeRow((d as any)._id ?? "", d));
+          setRows(nextRows);
+          if (nextRows.length > 0) setSelectedId(nextRows[0].id);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch { }
     getDocs(collection(db, "establishments"))
       .then((snapshot) => {
-        const nextRows = snapshot.docs.map((docSnapshot) => normalizeRow(docSnapshot.id, docSnapshot.data() as RawRecord));
+        const raw = snapshot.docs.map((d) => ({ _id: d.id, ...d.data() } as RawRecord));
+        try { sessionStorage.setItem(EST_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: raw })); } catch { }
+        const nextRows = raw.map((d) => normalizeRow((d as any)._id, d));
         setRows(nextRows);
         if (nextRows.length > 0) setSelectedId(nextRows[0].id);
       })
@@ -499,17 +509,17 @@ export default function ExplorerPage() {
       <div className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] p-6 shadow-sm">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-700">Market Explorer</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] accent">Market Explorer</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">Find the venues worth calling next.</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
               Rank establishments by revenue, isolate promising renewals, and surface under-served operators using the same TABC, Comptroller, Google, inspection, and permit signals powering the alert feed.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => applyPreset("topRevenue")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-amber-300 hover:text-amber-700">Top Revenue</button>
-            <button onClick={() => applyPreset("pendingRenewals")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-amber-300 hover:text-amber-700">Pending Renewals</button>
-            <button onClick={() => applyPreset("underRadar")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-amber-300 hover:text-amber-700">No Website Over $50k</button>
-            <button onClick={() => applyPreset("permitMomentum")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-amber-300 hover:text-amber-700">Permit Momentum</button>
+            <button onClick={() => applyPreset("topRevenue")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-[var(--brand-accent)] hover:text-accent">Top Revenue</button>
+            <button onClick={() => applyPreset("pendingRenewals")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-[var(--brand-accent)] hover:text-accent">Pending Renewals</button>
+            <button onClick={() => applyPreset("underRadar")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-[var(--brand-accent)] hover:text-accent">No Website Over $50k</button>
+            <button onClick={() => applyPreset("permitMomentum")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-[var(--brand-accent)] hover:text-accent">Permit Momentum</button>
           </div>
         </div>
       </div>
@@ -524,7 +534,7 @@ export default function ExplorerPage() {
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 xl:grid-cols-6 md:grid-cols-3">
-            <input value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} placeholder="Search venue, owner, address, license #" className="xl:col-span-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-amber-400" />
+            <input value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} placeholder="Search venue, owner, address, license #" className="xl:col-span-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[var(--brand-accent)]" />
             <select value={filters.county} onChange={(event) => setFilters((prev) => ({ ...prev, county: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
               <option value="">All counties</option>
               {counties.map((county) => <option key={county} value={county}>{county}</option>)}
@@ -564,7 +574,7 @@ export default function ExplorerPage() {
             <input value={filters.revenueMax} onChange={(event) => setFilters((prev) => ({ ...prev, revenueMax: event.target.value }))} placeholder="Revenue max" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
             <input value={filters.ratingMin} onChange={(event) => setFilters((prev) => ({ ...prev, ratingMin: event.target.value }))} placeholder="Min rating" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
             <input value={filters.healthMin} onChange={(event) => setFilters((prev) => ({ ...prev, healthMin: event.target.value }))} placeholder="Min health" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
-            <button onClick={handleExport} className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-400">Export CSV</button>
+            <button onClick={handleExport} className="rounded-xl btn-accent px-4 py-2.5 text-sm font-semibold">Export CSV</button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -575,14 +585,14 @@ export default function ExplorerPage() {
                     type="checkbox"
                     checked={onlyMissingGoogle}
                     onChange={(event) => setOnlyMissingGoogle(event.target.checked)}
-                    className="accent-amber-500"
+                    className="accent-[var(--brand-accent)]"
                   />
                   Only missing Google matches
                 </label>
                 <button
                   onClick={runGoogleEnrichForFiltered}
                   disabled={enrichingFiltered || filteredRows.length === 0}
-                  className="rounded-full bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-full btn-accent px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {enrichingFiltered ? "Queueing..." : "Admin: Enrich filtered list"}
                 </button>
@@ -609,7 +619,7 @@ export default function ExplorerPage() {
       {loading ? (
         <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm">Loading explorer data...</div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.8fr)]">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.8fr)]">
           <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
@@ -631,8 +641,8 @@ export default function ExplorerPage() {
                     const health = row.healthInspection?.latestScore;
                     const hasPermits = Boolean(row.buildingPermits?.hasSignificantRecentWork || row.buildingPermits?.recentPermits?.length);
                     const selectedRow = row.id === selected?.id;
-                    return (
-                      <tr key={row.id} className={`cursor-pointer transition hover:bg-amber-50/60 ${selectedRow ? "bg-amber-50/80" : ""}`} onClick={() => setSelectedId(row.id)}>
+                      return (
+                      <tr key={row.id} className={`cursor-pointer transition hover:bg-[rgba(200,169,108,0.06)] ${selectedRow ? "bg-[rgba(200,169,108,0.08)]" : ""}`} onClick={() => setSelectedId(row.id)}>
                         <td className="px-4 py-3 align-top">
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -708,6 +718,13 @@ export default function ExplorerPage() {
                   <DetailRow label="Phone" value={selected.googlePlaces?.phoneNumber || "No phone found"} />
                   <DetailRow label="Hours" value={formatGoogleHours(selected.googlePlaces?.hours)} />
                   <DetailRow label="Website" value={selected.googlePlaces?.website || "No website found"} />
+                  {selected.googlePlaces?.matchedVia === 'mail' && (
+                    <DetailRow label="Contact matched via" value="Mailing address (not venue)" />
+                  )}
+                  {(selected.mailAddress || selected.mailCity) && selected.mailAddress !== selected.address && (
+                    <DetailRow label="Mailing Address" value={[selected.mailAddress, selected.mailCity].filter(Boolean).join(", ")} />
+                  )}
+                  <EmailRow id={selected.id} initialEmail={selected.email} isAdmin={isAdmin} />
                   <DetailRow label="Latest Inspection" value={selected.healthInspection?.latestInspectionDate ? `${selected.healthInspection.latestScore ?? "--"} on ${formatDate(selected.healthInspection.latestInspectionDate)}` : "No inspection data"} />
                   <DetailRow label="Permit Signal" value={selected.buildingPermits?.hasSignificantRecentWork ? `Recent permit value ${formatCurrency(selected.buildingPermits?.largestRecentPermitValue)}` : "No major permit signal"} />
                   <DetailRow label="First Seen" value={formatDate(selected.firstSeenAt || selected.applicationDate)} />
@@ -728,6 +745,50 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2">
       <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">{label}</span>
       <span className="text-right text-sm text-slate-700">{value}</span>
+    </div>
+  );
+}
+
+function EmailRow({ id, initialEmail, isAdmin }: { id: string; initialEmail?: string; isAdmin: boolean }) {
+  const [email, setEmail] = useState(initialEmail ?? "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { doc, updateDoc } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase");
+      await updateDoc(doc(db, "establishments", id), { email: email.trim() });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isAdmin && !email) return null;
+
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2">
+      <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Email</span>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <input
+            className="text-sm border border-slate-300 rounded px-2 py-0.5 text-slate-800 w-48"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
+            autoFocus
+          />
+          <button onClick={save} disabled={saving} className="text-xs text-[var(--brand-accent)] font-semibold">{saving ? "…" : "Save"}</button>
+          <button onClick={() => setEditing(false)} className="text-xs text-slate-400">Cancel</button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          <span className="text-right text-sm text-slate-700">{email || (isAdmin ? <span className="text-slate-400 italic">No email — click to add</span> : "No email found")}</span>
+          {isAdmin && <button onClick={() => setEditing(true)} className="text-xs text-slate-400 hover:text-slate-600">Edit</button>}
+        </div>
+      )}
     </div>
   );
 }

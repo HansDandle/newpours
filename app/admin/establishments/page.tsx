@@ -87,7 +87,7 @@ export default function AdminEstablishmentsPage() {
           placeholder="Search name, license #, county…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-72 focus:outline-none focus:ring-1 focus:ring-amber-500"
+          className="bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-72 focus:outline-none focus:ring-1 focus:ring-[var(--brand-accent)]"
         />
         <select
           value={countyFilter}
@@ -114,7 +114,7 @@ export default function AdminEstablishmentsPage() {
             type="checkbox"
             checked={dupFilter}
             onChange={(e) => setDupFilter(e.target.checked)}
-            className="accent-amber-500"
+            className="accent-[var(--brand-accent)]"
           />
           Duplicate flags only
         </label>
@@ -155,7 +155,7 @@ export default function AdminEstablishmentsPage() {
                   <td className="px-3 py-2">
                     <Link
                       href={`/admin/establishments/${row.id}`}
-                      className="text-amber-400 hover:underline"
+                      className="accent hover:underline"
                     >
                       {row.businessName || "—"}
                     </Link>

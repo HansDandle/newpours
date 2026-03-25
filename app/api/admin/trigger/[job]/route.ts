@@ -7,6 +7,7 @@ const TABC_PENDING_API = "https://data.texas.gov/resource/mxm5-tdpj.json";
 
 const VALID_JOBS = [
   "tabc_ingest",
+  "dedup_pending",
   "comptroller_update",
   "google_places_refresh",
   "health_inspections",

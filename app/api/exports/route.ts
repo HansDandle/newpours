@@ -27,11 +27,26 @@ export async function POST(req: NextRequest) {
 
   const db = getAdminDb();
   const userSnap = await db.collection("users").doc(uid).get();
-  const user = userSnap.data() as { plan?: string; planStatus?: string } | undefined;
+  const user = userSnap.data() as { plan?: string; planStatus?: string; lastExportAt?: { toDate(): Date } } | undefined;
 
   const hasProExports = (user?.plan === "pro" || user?.plan === "enterprise") && user?.planStatus === "active";
   if (!hasProExports && !isAdmin) {
     return NextResponse.json({ error: "CSV exports require an active Pro or Enterprise plan." }, { status: 403 });
+  }
+
+  // Rate limit: 1 export per 10 minutes per user (prevents repeated full-collection scans)
+  const EXPORT_COOLDOWN_MS = 10 * 60 * 1000;
+  if (!isAdmin && user?.lastExportAt) {
+    const lastExport = typeof user.lastExportAt.toDate === "function"
+      ? user.lastExportAt.toDate()
+      : new Date(user.lastExportAt as any);
+    if (Date.now() - lastExport.getTime() < EXPORT_COOLDOWN_MS) {
+      const retryAfterSec = Math.ceil((EXPORT_COOLDOWN_MS - (Date.now() - lastExport.getTime())) / 1000);
+      return NextResponse.json(
+        { error: `Export rate limit: please wait ${retryAfterSec}s before exporting again.` },
+        { status: 429, headers: { "Retry-After": String(retryAfterSec) } }
+      );
+    }
   }
 
   const licensesSnap = await db.collection("licenses").get();
@@ -67,13 +82,16 @@ export async function POST(req: NextRequest) {
     ...rows.map((row) => headers.map((h) => csvEscape(row[h as keyof typeof row])).join(",")),
   ].join("\n");
 
-  await db.collection("exports").add({
-    userId: uid,
-    createdAt: new Date(),
-    recordCount: rows.length,
-    filters: {},
-    status: "ready",
-  });
+  await Promise.all([
+    db.collection("exports").add({
+      userId: uid,
+      createdAt: new Date(),
+      recordCount: rows.length,
+      filters: {},
+      status: "ready",
+    }),
+    db.collection("users").doc(uid).update({ lastExportAt: new Date() }),
+  ]);
 
   return new NextResponse(csv, {
     status: 200,

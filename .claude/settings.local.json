@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Code/newpours -name *.md -type f)",
+      "Bash(xargs grep:*)",
+      "Bash(unzip -l \"C:/Code/newpours/travis_SUPP 318_2025_WEBSITE EXPORT_Renamed.zip\")",
+      "Bash(unzip -p 'C:/Code/newpours/travis_SUPP 318_2025_WEBSITE EXPORT_Renamed.zip')",
+      "Bash(unzip -p \"C:/Code/newpours/travis_SUPP 318_2025_WEBSITE EXPORT_Renamed.zip\" APPR_HDR.TXT)",
+      "Bash(unzip -p 'C:/Code/newpours/travis_SUPP 318_2025_WEBSITE EXPORT_Renamed.zip' PROP.TXT)",
+      "Bash(unzip -p \"C:/Code/newpours/travis_SUPP 318_2025_WEBSITE EXPORT_Renamed.zip\" ARBITRATION.TXT)"
+    ]
+  }
+}

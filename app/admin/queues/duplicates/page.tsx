@@ -83,7 +83,7 @@ export default function DuplicateFlagsPage() {
     if (!record) return <div className="flex-1 bg-gray-800/40 rounded-lg p-4 text-center text-gray-600 text-sm">Pair member unavailable.</div>;
     return (
       <div className="flex-1 bg-gray-800 rounded-lg p-4 space-y-2">
-        <Link href={`/admin/establishments/${record.id}`} className="text-amber-400 hover:underline text-sm font-medium">
+        <Link href={`/admin/establishments/${record.id}`} className="accent hover:underline text-sm font-medium">
           {record.businessName || record.id}
         </Link>
         <p className="text-xs text-gray-500 font-mono">{record.licenseNumber}</p>

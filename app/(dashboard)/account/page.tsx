@@ -106,7 +106,7 @@ export default function AccountPage() {
 
   return (
     <section className="max-w-2xl">
-      <h1 className="text-2xl font-bold mb-6 text-[#1a2233]">Account Settings</h1>
+      <h1 className="text-2xl font-bold mb-6 text-on-light">Account Settings</h1>
 
       {/* User Info */}
       {user && (
@@ -118,7 +118,7 @@ export default function AccountPage() {
               <img src={user.photoURL} alt="avatar" className="w-12 h-12 rounded-full" />
             )}
             <div>
-              <p className="font-medium text-[#1a2233]">{user.displayName}</p>
+              <p className="font-medium text-on-light">{user.displayName}</p>
               <p className="text-sm text-gray-500">{user.email}</p>
             </div>
           </div>
@@ -129,13 +129,13 @@ export default function AccountPage() {
       <div className="border rounded-xl p-6 bg-white shadow-sm mb-6">
         <h2 className="font-semibold text-lg mb-1">Current Plan</h2>
         <p className="text-gray-500 text-sm mb-4">
-          You are on the <span className="font-bold text-[#1a2233]">{PLAN_LABELS[plan]}</span> plan
+          You are on the <span className="font-bold text-on-light">{PLAN_LABELS[plan]}</span> plan
           {planStatus === "active" ? "" : ` (${planStatus})`}.
         </p>
         <div className="flex gap-3">
           <a
             href="/pricing"
-            className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-400 transition"
+            className="btn-accent px-4 py-2 rounded-lg text-sm font-semibold"
           >
             Upgrade Plan
           </a>
@@ -208,7 +208,7 @@ export default function AccountPage() {
           <button
             onClick={savePreferences}
             disabled={saving || !user}
-            className="bg-[#1a2233] text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition disabled:opacity-50"
+            className="btn-accent px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
           >
             {saving ? "Saving..." : "Save Preferences"}
           </button>
@@ -223,7 +223,7 @@ export default function AccountPage() {
         <code className="block bg-gray-100 rounded px-3 py-2 text-xs font-mono text-gray-500">
           {hasProFeatures ? "••••••••••••••••••••••••••" : "Upgrade to Pro to access API keys."}
         </code>
-        <button className="mt-3 text-sm text-amber-600 hover:underline" disabled={!hasProFeatures}>
+        <button className="mt-3 text-sm accent hover:underline" disabled={!hasProFeatures}>
           Regenerate Key
         </button>
       </div>

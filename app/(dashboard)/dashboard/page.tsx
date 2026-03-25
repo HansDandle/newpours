@@ -1,12 +1,41 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import type { EstablishmentClassification, License, PlanStatus, UserPlan } from "@/types";
 import { getLicenseTypeInfo, TABC_LICENSE_TYPES } from "@/lib/tabc-license-types";
 
 const DASHBOARD_FILTERS_STORAGE_KEY = "newpours.dashboard.filters.v1";
+
+const TEXAS_COUNTIES = [
+  "Anderson","Andrews","Angelina","Aransas","Archer","Armstrong","Atascosa","Austin","Bailey","Bandera",
+  "Bastrop","Baylor","Bee","Bell","Bexar","Blanco","Borden","Bosque","Bowie","Brazoria","Brazos",
+  "Brewster","Briscoe","Brooks","Brown","Burleson","Burnet","Caldwell","Calhoun","Callahan","Cameron",
+  "Camp","Carson","Cass","Castro","Chambers","Cherokee","Childress","Clay","Cochran","Coke","Coleman",
+  "Collin","Collingsworth","Colorado","Comal","Comanche","Concho","Cooke","Corpus Christi","Coryell",
+  "Cottle","Crane","Crockett","Crosby","Culberson","Dallam","Dallas","Dawson","Deaf Smith","Delta",
+  "Denton","DeWitt","Dickens","Dimmit","Donley","Duval","Eastland","Ector","Edwards","El Paso","Ellis",
+  "Erath","Falls","Fannin","Fayette","Fisher","Floyd","Foard","Fort Bend","Franklin","Freestone","Frio",
+  "Gaines","Galveston","Garza","Gillespie","Glasscock","Goliad","Gonzales","Gray","Grayson","Gregg",
+  "Grimes","Guadalupe","Hale","Hall","Hamilton","Hansford","Hardeman","Hardin","Harris","Harrison",
+  "Hartley","Haskell","Hays","Hemphill","Henderson","Hidalgo","Hill","Hockley","Hood","Hopkins",
+  "Houston","Howard","Hudspeth","Hunt","Hutchinson","Irion","Jack","Jackson","Jasper","Jeff Davis",
+  "Jefferson","Jim Hogg","Jim Wells","Johnson","Jones","Karnes","Kaufman","Kendall","Kenedy","Kent",
+  "Kerr","Kimble","King","Kinney","Kleberg","Knox","Lamar","Lamb","Lampasas","La Salle","Lavaca",
+  "Lee","Leon","Liberty","Limestone","Lipscomb","Live Oak","Llano","Loving","Lubbock","Lynn",
+  "Madison","Marion","Martin","Mason","Matagorda","Maverick","McCulloch","McLennan","McMullen",
+  "Medina","Menard","Midland","Milam","Mills","Mitchell","Montague","Montgomery","Moore","Morris",
+  "Motley","Nacogdoches","Navarro","Newton","Nolan","Nueces","Ochiltree","Oldham","Orange","Palo Pinto",
+  "Panola","Parker","Parmer","Pecos","Polk","Potter","Presidio","Rains","Randall","Reagan","Real",
+  "Red River","Reeves","Refugio","Roberts","Robertson","Rockwall","Runnels","Rusk","Sabine",
+  "San Augustine","San Jacinto","San Patricio","San Saba","Schleicher","Scurry","Shackelford",
+  "Shelby","Sherman","Smith","Somervell","Starr","Stephens","Sterling","Stonewall","Sutton","Swisher",
+  "Tarrant","Taylor","Terrell","Terry","Throckmorton","Titus","Tom Green","Travis","Trinity","Tyler",
+  "Upshur","Upton","Uvalde","Val Verde","Van Zandt","Victoria","Walker","Waller","Ward","Washington",
+  "Webb","Wharton","Wheeler","Wichita","Wilbarger","Willacy","Williamson","Wilson","Winkler","Wise",
+  "Wood","Yoakum","Young","Zapata","Zavala",
+];
 
 type PersistedDashboardFilters = {
   counties: string[];
@@ -17,7 +46,32 @@ type PersistedDashboardFilters = {
   search: string;
   dateFrom: string;
   dateTo: string;
+  hideExpired: boolean;
 };
+
+// Convert a Firestore Timestamp (or plain seconds object) to a JS Date
+function fsTimestampToDate(val: any): Date | null {
+  if (!val) return null;
+  if (typeof val.toDate === "function") return val.toDate();
+  if (val.seconds != null) return new Date(val.seconds * 1000);
+  return null;
+}
+
+const DEAD_STATUS_KEYWORDS = ["expired", "surrendered", "cancelled", "revoked"];
+function isClosedLicense(lic: License): boolean {
+  const st = (lic.status ?? "").toLowerCase();
+  const sec = (lic.secondaryStatus ?? "").toLowerCase();
+  return DEAD_STATUS_KEYWORDS.some((kw) => st.includes(kw) || sec.includes(kw));
+}
+
+// Hard filter: expiration date more than 90 days in the past — never show in alert feed
+const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+function isStaleExpired(lic: License): boolean {
+  if (!lic.expirationDate) return false;
+  const exp = new Date(lic.expirationDate).getTime();
+  if (isNaN(exp)) return false;
+  return Date.now() - exp > NINETY_DAYS_MS;
+}
 
 type EstablishmentEnrichment = {
   licenseNumber?: string;
@@ -136,6 +190,7 @@ function MultiSelect({
   onChange,
   renderOption,
   searchable = false,
+  maxSelected,
 }: {
   label: string;
   options: string[];
@@ -143,6 +198,7 @@ function MultiSelect({
   onChange: (next: Set<string>) => void;
   renderOption?: (val: string) => string;
   searchable?: boolean;
+  maxSelected?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -168,7 +224,13 @@ function MultiSelect({
 
   const toggle = (val: string) => {
     const next = new Set(selected);
-    next.has(val) ? next.delete(val) : next.add(val);
+    if (next.has(val)) {
+      next.delete(val);
+    } else {
+      if (!maxSelected || next.size < maxSelected) {
+        next.add(val);
+      }
+    }
     onChange(next);
   };
 
@@ -201,7 +263,7 @@ function MultiSelect({
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={`flex items-center gap-2 border rounded-lg px-3 py-2 text-sm bg-white min-w-[140px] justify-between ${
-          isActive ? "border-amber-400 text-amber-700 font-semibold" : "border-gray-300 text-gray-700"
+          isActive ? "border-[var(--brand-accent)] text-accent font-semibold" : "border-gray-300 text-gray-700"
         }`}
       >
         <span className="truncate max-w-[160px]">{btnLabel}</span>
@@ -213,37 +275,41 @@ function MultiSelect({
         <div className="absolute z-20 mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg py-1">
           {searchable && (
             <div className="px-3 pb-2 pt-1 border-b border-gray-100 bg-white sticky top-0">
-              <input
+                <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={`Search ${label.toLowerCase()}...`}
-                className="w-full border border-gray-200 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-200"
+                className="w-full border border-gray-200 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--brand-accent)]"
               />
             </div>
           )}
           {filteredOptions.length > 0 && (
-            <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 cursor-pointer text-sm font-semibold border-b border-gray-100 bg-gray-50">
+              <label className="flex items-center gap-2 px-3 py-1.5 hover:bg-[rgba(200,169,108,0.06)] cursor-pointer text-sm font-semibold border-b border-gray-100 bg-gray-50">
               <input
                 type="checkbox"
                 checked={allVisibleSelected}
                 onChange={toggleAll}
-                className="accent-amber-500"
+                className="accent-[var(--brand-accent)]"
               />
               <span>{allVisibleSelected ? "Clear Visible" : "Select Visible"}</span>
             </label>
           )}
-          {filteredOptions.map((opt) => (
-            <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm">
-              <input
-                type="checkbox"
-                checked={selected.has(opt)}
-                onChange={() => toggle(opt)}
-                className="accent-amber-500"
-              />
-              <span>{renderOption ? renderOption(opt) : opt}</span>
-            </label>
-          ))}
+          {filteredOptions.map((opt) => {
+            const disabled = !selected.has(opt) && maxSelected && selected.size >= maxSelected;
+            return (
+              <label key={opt} className={`flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-sm ${disabled ? "opacity-50 pointer-events-none" : ""}`}>
+                <input
+                  type="checkbox"
+                  checked={selected.has(opt)}
+                  onChange={() => toggle(opt)}
+                  className="accent-[var(--brand-accent)]"
+                  disabled={disabled}
+                />
+                <span>{renderOption ? renderOption(opt) : opt}</span>
+              </label>
+            );
+          })}
           {filteredOptions.length === 0 && <p className="px-3 py-2 text-xs text-gray-400">No options</p>}
         </div>
       )}
@@ -251,24 +317,40 @@ function MultiSelect({
   );
 }
 
+const EST_CACHE_KEY = "newpours.establishments.cache.v1";
+const EST_CACHE_TTL = 5 * 60 * 1000;
+
+function getCachedEstablishments(): Record<string, any>[] | null {
+  try {
+    const raw = sessionStorage.getItem(EST_CACHE_KEY);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw) as { ts: number; data: Record<string, any>[] };
+    if (Date.now() - ts > EST_CACHE_TTL) return null;
+    return data;
+  } catch { return null; }
+}
+
+function setCachedEstablishments(data: Record<string, any>[]) {
+  try { sessionStorage.setItem(EST_CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch { }
+}
+
 export default function DashboardPage() {
-  const { user } = useAuth();
+  const { user, userPlan, userPlanStatus, isAdmin } = useAuth();
   const [licenses, setLicenses] = useState<License[]>([]);
   const [enrichmentByLicense, setEnrichmentByLicense] = useState<Map<string, EstablishmentEnrichment>>(new Map());
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [userPlan, setUserPlan] = useState<UserPlan>("free");
-  const [userPlanStatus, setUserPlanStatus] = useState<PlanStatus>("canceled");
   const [counties, setCounties] = useState<Set<string>>(new Set());
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [zip, setZip] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [classificationFilters, setClassificationFilters] = useState<Set<string>>(new Set(["TRULY_NEW"]));
+  const [classificationFilters, setClassificationFilters] = useState<Set<string>>(new Set(["RECENTLY_GRANTED"]));
   const [search, setSearch] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [hideExpired, setHideExpired] = useState(true);
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const toggle = (id: string) =>
     setExpanded((prev) => {
@@ -277,32 +359,57 @@ export default function DashboardPage() {
       return next;
     });
 
+  // Stable key for useEffect dependency — only re-fetch when the county selection changes
+  const countiesKey = [...counties].sort().join(",");
+
   useEffect(() => {
+    if (!user || !filtersHydrated) {
+      setLoading(false);
+      return;
+    }
+    if (counties.size === 0) {
+      // No county selected — clear any stale results without hitting Firestore
+      setLicenses([]);
+      setEnrichmentByLicense(new Map());
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setFetchError(null);
     const fetchLicenses = async () => {
       try {
-        const [licenseSnap, establishmentSnap] = await Promise.all([
-          getDocs(collection(db, "licenses")),
-          getDocs(collection(db, "establishments")),
-        ]);
-
+        // Fetch establishments from sessionStorage cache when available (5-min TTL)
         const enrichmentMap = new Map<string, EstablishmentEnrichment>();
-        for (const d of establishmentSnap.docs) {
-          const data = normalizeEstablishmentEnrichment(d.data() as Record<string, any>);
+        let estDocs = getCachedEstablishments();
+        if (!estDocs) {
+          const estSnap = await getDocs(collection(db, "establishments"));
+          estDocs = estSnap.docs.map((d) => ({ _id: d.id, ...d.data() }));
+          setCachedEstablishments(estDocs);
+        }
+        for (const raw of estDocs) {
+          const data = normalizeEstablishmentEnrichment(raw as Record<string, any>);
           if (data.licenseNumber) enrichmentMap.set(data.licenseNumber, data);
         }
         setEnrichmentByLicense(enrichmentMap);
 
+        // Fetch 2000 most recently *filed* licenses (by TABC application date).
+        // County filtering is client-side, so we need enough records to span all counties.
+        const licenseSnap = await getDocs(
+          query(collection(db, "licenses"), orderBy("applicationDate", "desc"), limit(2000))
+        );
         const nextLicenses = licenseSnap.docs
-          .map((d) => ({ ...d.data(), licenseNumber: d.id } as License))
-          .sort((left, right) => getSortableTimestamp(right.applicationDate) - getSortableTimestamp(left.applicationDate));
+          .map((d) => ({ ...d.data(), licenseNumber: d.id } as License));
         setLicenses(nextLicenses);
-      } catch {
+      } catch (err) {
+        const msg = (err as Error)?.message ?? "Unknown error";
+        setFetchError(msg);
       } finally {
         setLoading(false);
       }
     };
     fetchLicenses();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, filtersHydrated, countiesKey]);
 
   useEffect(() => {
     try {
@@ -323,6 +430,7 @@ export default function DashboardPage() {
       if (typeof parsed.search === "string") setSearch(parsed.search);
       if (typeof parsed.dateFrom === "string") setDateFrom(parsed.dateFrom);
       if (typeof parsed.dateTo === "string") setDateTo(parsed.dateTo);
+      if (typeof parsed.hideExpired === "boolean") setHideExpired(parsed.hideExpired);
     } catch {
     } finally {
       setFiltersHydrated(true);
@@ -341,71 +449,75 @@ export default function DashboardPage() {
       search,
       dateFrom,
       dateTo,
+      hideExpired,
     };
 
     try {
       localStorage.setItem(DASHBOARD_FILTERS_STORAGE_KEY, JSON.stringify(payload));
     } catch {
     }
-  }, [counties, types, zip, statusFilter, classificationFilters, search, dateFrom, dateTo, filtersHydrated]);
+  }, [counties, types, zip, statusFilter, classificationFilters, search, dateFrom, dateTo, hideExpired, filtersHydrated]);
 
-  useEffect(() => {
-    const loadAdminClaim = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        return;
-      }
-
-      try {
-        const tokenResult = await user.getIdTokenResult(false);
-        setIsAdmin(tokenResult.claims.role === "admin");
-      } catch {
-        setIsAdmin(false);
-      }
-    };
-
-    loadAdminClaim();
-  }, [user]);
-
-  useEffect(() => {
-    const fetchUserPlan = async () => {
-      if (!user) {
-        setUserPlan("free");
-        setUserPlanStatus("canceled");
-        return;
-      }
-
-      try {
-        const userSnap = await getDoc(doc(db, "users", user.uid));
-        const data = userSnap.data() as { plan?: UserPlan; planStatus?: PlanStatus } | undefined;
-        setUserPlan(data?.plan ?? "free");
-        setUserPlanStatus(data?.planStatus ?? "active");
-      } catch {
-        setUserPlan("free");
-        setUserPlanStatus("canceled");
-      }
-    };
-
-    fetchUserPlan();
-  }, [user]);
+  // userPlan, userPlanStatus, and isAdmin are provided by AuthProvider — no separate reads needed here.
 
   const hasProEnrichment = (userPlan === "pro" || userPlan === "enterprise") && userPlanStatus === "active";
   const hasEnrichmentAccess = hasProEnrichment || isAdmin;
 
-  const allCounties = [...new Set(licenses.map((l) => l.county).filter(Boolean))].sort() as string[];
+  // Static Texas county list so the county picker is always populated without a Firestore fetch
+  const allCounties = TEXAS_COUNTIES;
   const allTypes = [...new Set(licenses.map((l) => l.licenseType).filter(Boolean))].sort() as string[];
-  const classificationOptions: string[] = ["TRULY_NEW", "PENDING_NEW", "RENEWAL", "TRANSFER_OR_CHANGE", "UNKNOWN"];
+  const classificationOptions: string[] = ["RECENTLY_GRANTED", "PENDING_NEW", "REOPENED", "RENEWAL", "TRANSFER_OR_CHANGE", "UNKNOWN"];
+
+  const CLASSIFICATION_LABELS: Record<string, string> = {
+    RECENTLY_GRANTED: "New to Market (First-Time Licensed)",
+    TRULY_NEW: "First-Time Issued",
+    PENDING_NEW: "New Application (Pending)",
+    REOPENED: "Reopened Location",
+    RENEWAL: "Renewal",
+    TRANSFER_OR_CHANGE: "Transfer / Change",
+    UNKNOWN: "Unknown",
+  };
+
+  // Per-user "new" threshold: records ingested after this user's account was created
+  const userCreatedAt = user?.metadata?.creationTime
+    ? new Date(user.metadata.creationTime).getTime()
+    : 0;
+
+  // Most recent TABC filing date in the fetched set — shows how current the data is
+  const lastIngestDate = licenses.length > 0 && licenses[0].applicationDate
+    ? new Date(licenses[0].applicationDate)
+    : null;
 
   const filtered = licenses.filter((lic) => {
     const pendingRecord = isPendingRecord(lic);
     const effectiveClassification = getEffectiveClassification(lic);
 
+    // Always hide records whose license expired more than 90 days ago
+    if (isStaleExpired(lic)) return false;
+    // Toggle: hide status-based closed records
+    if (hideExpired && isClosedLicense(lic)) return false;
     if (counties.size > 0 && !counties.has(lic.county ?? "")) return false;
     if (types.size > 0 && !types.has(lic.licenseType ?? "")) return false;
     if (zip && lic.zipCode !== zip) return false;
-    if (statusFilter === "pending" && !pendingRecord) return false;
+    if (statusFilter === "received" && (lic.status ?? "").toLowerCase() !== "received") return false;
+    if (statusFilter === "pending" && (!pendingRecord || (lic.status ?? "").toLowerCase() === "received")) return false;
     if (statusFilter === "approved" && pendingRecord) return false;
-    if (classificationFilters.size > 0 && !classificationFilters.has(effectiveClassification)) return false;
+    if (classificationFilters.size > 0) {
+      // "New to Market": prefer originalIssueDate for the 90-day window;
+      // fall back to applicationDate + classification for records where TABC
+      // did not return original_issue_date.
+      const matchesGranted = classificationFilters.has("RECENTLY_GRANTED") && (() => {
+        const rawDate = (lic.originalIssueDate as string | null | undefined)
+          ?? ((
+              lic.newEstablishmentClassification === "TRULY_NEW" ||
+              lic.newEstablishmentClassification === "REOPENED"
+            ) ? (lic.applicationDate as string | null | undefined) : null);
+        if (!rawDate) return false;
+        return Date.now() - new Date(rawDate).getTime() <= NINETY_DAYS_MS;
+      })();
+      const matchesDirect = classificationFilters.has(effectiveClassification);
+      if (!matchesGranted && !matchesDirect) return false;
+    }
     if (search) {
       const searchLower = search.toLowerCase();
       const matches =
@@ -430,10 +542,17 @@ export default function DashboardPage() {
     return true;
   });
 
+  // Sort by TABC application/issue date, newest first
+  const sorted = [...filtered].sort((a, b) => {
+    const ta = a.applicationDate ? new Date(a.applicationDate).getTime() : 0;
+    const tb = b.applicationDate ? new Date(b.applicationDate).getTime() : 0;
+    return tb - ta;
+  });
+
   const handleExport = () => {
-    if (!filtered.length) return;
+    if (!sorted.length) return;
     const header = "licenseNumber,businessName,address,city,county,licenseType,status,filedDate\n";
-    const rows = filtered.map((l) =>
+    const rows = sorted.map((l) =>
       [l.licenseNumber, l.businessName, l.address, l.city, l.county, l.licenseType, l.status, l.applicationDate].join(",")
     );
     const blob = new Blob([header + rows.join("\n")], { type: "text/csv" });
@@ -449,29 +568,45 @@ export default function DashboardPage() {
     <section>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-[#1a2233]">License Alerts</h1>
+          <h1 className="text-2xl font-bold text-on-light">License Alerts</h1>
           {!loading && licenses.length > 0 && (
-            <p className="text-sm text-gray-400 mt-0.5">{filtered.length} of {licenses.length} licenses</p>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {sorted.length} of {licenses.length} licenses
+              {lastIngestDate && (
+                <span className="ml-2 text-gray-300">
+                  · updated {Math.floor((Date.now() - lastIngestDate.getTime()) / 3600000) < 24
+                    ? `${Math.floor((Date.now() - lastIngestDate.getTime()) / 3600000)}h ago`
+                    : `${Math.floor((Date.now() - lastIngestDate.getTime()) / 86400000)}d ago`
+                  }
+                </span>
+              )}
+            </p>
           )}
         </div>
         <button
           onClick={handleExport}
           disabled={!hasEnrichmentAccess}
           title={hasEnrichmentAccess ? "Export filtered rows to CSV" : "CSV exports are available on Pro and Enterprise plans."}
-          className="bg-amber-500 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="btn-accent px-4 py-2 rounded-lg text-sm font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {hasEnrichmentAccess ? "Export CSV" : "Export CSV (Pro+)"}
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-8">
-        <MultiSelect
-          label="All Counties"
-          options={allCounties}
-          selected={counties}
-          onChange={setCounties}
-          searchable
-        />
+      <div className="flex flex-wrap gap-3 mb-8 items-center">
+        <div className={`flex items-center gap-2 ${counties.size === 0 ? "ring-2 ring-[var(--brand-accent)] rounded-lg" : ""}`}>
+          {counties.size === 0 && (
+            <span className="text-xs font-semibold accent whitespace-nowrap pl-1">Start here →</span>
+          )}
+          <MultiSelect
+            label="Select County"
+            options={allCounties}
+            selected={counties}
+            onChange={setCounties}
+            searchable
+            maxSelected={3}
+          />
+        </div>
 
         <MultiSelect
           label="All License Types"
@@ -490,7 +625,8 @@ export default function DashboardPage() {
           onChange={(e) => setStatusFilter(e.target.value)}
         >
           <option value="">All Statuses</option>
-          <option value="pending">Pending Applications</option>
+          <option value="received">Submitted – Not Yet In Review</option>
+          <option value="pending">In Review (Pending)</option>
           <option value="approved">Issued / Approved</option>
         </select>
 
@@ -499,7 +635,7 @@ export default function DashboardPage() {
           options={classificationOptions}
           selected={classificationFilters}
           onChange={setClassificationFilters}
-          renderOption={(val) => val.replaceAll("_", " ")}
+          renderOption={(val) => CLASSIFICATION_LABELS[val] ?? val.replaceAll("_", " ")}
         />
 
         <input
@@ -537,6 +673,16 @@ export default function DashboardPage() {
           />
         </div>
 
+        <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={hideExpired}
+            onChange={(e) => setHideExpired(e.target.checked)}
+            className="accent-[var(--brand-accent)]"
+          />
+          Hide closed
+        </label>
+
         {(counties.size > 0 || types.size > 0 || zip || statusFilter || classificationFilters.size > 0 || search || dateFrom || dateTo) && (
           <button
             onClick={() => {
@@ -544,7 +690,7 @@ export default function DashboardPage() {
               setTypes(new Set());
               setZip("");
               setStatusFilter("");
-              setClassificationFilters(new Set(["TRULY_NEW"]));
+              setClassificationFilters(new Set(["RECENTLY_GRANTED"]));
               setSearch("");
               setDateFrom("");
               setDateTo("");
@@ -560,25 +706,52 @@ export default function DashboardPage() {
         <p className="text-gray-400 text-sm animate-pulse">Loading license data...</p>
       )}
 
-      {!loading && filtered.length === 0 && (
+      {!loading && fetchError && (
+        <div className="text-center py-16 text-red-500">
+          <p className="font-semibold mb-1">Failed to load license data</p>
+          <p className="text-sm text-red-400">{fetchError}</p>
+          <p className="text-xs text-gray-400 mt-3">Check the browser console for details, or try refreshing the page.</p>
+        </div>
+      )}
+
+      {!loading && !fetchError && counties.size === 0 && (
+        <div className="text-center py-24 text-gray-400">
+          <p className="text-4xl mb-4">📍</p>
+          <p className="font-semibold text-gray-600 text-lg">Choose a county to load your feed</p>
+          <p className="text-sm mt-2">Select one or more counties above to see TABC license alerts for your territory.</p>
+        </div>
+      )}
+
+      {!loading && !fetchError && counties.size > 0 && sorted.length === 0 && (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">[ ]</p>
-          <p className="font-semibold">No licenses found yet.</p>
-          <p className="text-sm mt-1">New filings will appear here after the daily ingest runs.</p>
+          <p className="font-semibold">No licenses found for the selected filters.</p>
+          <p className="text-sm mt-1">Try removing a filter or expanding your county selection.</p>
         </div>
       )}
 
       <div className="flex flex-col gap-3">
-        {filtered.map((lic) => {
+        {sorted.map((lic) => {
           const isOpen = expanded.has(lic.licenseNumber);
           const effectiveClassification = getEffectiveClassification(lic);
           const typeInfo = getLicenseTypeInfo(lic.licenseType);
+          const firstSeenDate = fsTimestampToDate(lic.firstSeenAt);
           const daysAgo = lic.applicationDate
             ? Math.floor((Date.now() - new Date(lic.applicationDate).getTime()) / 86400000)
             : null;
-          const statusColor =
-            lic.status === "Active" ? "text-green-600" :
-            lic.status === "Expired" ? "text-red-500" : "text-yellow-600";
+          const isNewForUser = firstSeenDate != null
+            && firstSeenDate.getTime() > userCreatedAt
+            && (effectiveClassification === "TRULY_NEW" || effectiveClassification === "REOPENED" || effectiveClassification === "PENDING_NEW");
+          const isClosed = isClosedLicense(lic);
+          // Determine status badge
+          let statusBadge = null;
+          if (lic.licenseTypeLabel === "Pending Application") {
+            statusBadge = <span className="bg-yellow-100 text-yellow-700 text-xs font-bold px-2 py-0.5 rounded-full mr-1">Pending</span>;
+          } else if (lic.status === "Active") {
+            statusBadge = <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full mr-1">Issued</span>;
+          } else if (isClosed) {
+            statusBadge = <span className="bg-red-50 text-red-400 text-xs font-semibold px-2 py-0.5 rounded-full mr-1">Closed</span>;
+          }
           return (
             <div key={lic.licenseNumber} className="border border-gray-200 rounded-xl bg-white shadow-sm">
               <button
@@ -586,36 +759,29 @@ export default function DashboardPage() {
                 className="w-full text-left px-6 py-4 flex items-start justify-between gap-4 hover:bg-gray-50 rounded-xl transition"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-semibold text-[#1a2233] truncate">{lic.businessName || "-"}</h2>
-                    {lic.isNew && (
-                      <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">NEW</span>
-                    )}
-                    {effectiveClassification !== "UNKNOWN" && (
-                      <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                        {effectiveClassification.replaceAll("_", " ")}
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    {statusBadge}
+                    {lic.licenseType && (
+                      <span className="bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        {lic.licenseType}
+                        {typeInfo && ` - ${typeInfo.short}`}
                       </span>
                     )}
+                    {isNewForUser && (
+                      <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">NEW</span>
+                    )}
                   </div>
-                  <p className="text-gray-500 text-sm mt-0.5 truncate">
+                  <h2 className="text-base font-semibold text-on-light truncate mb-0.5">{lic.businessName || lic.ownerName || "-"}</h2>
+                  <p className="text-gray-500 text-sm truncate">
                     {joinParts([lic.address, lic.address2, lic.city, lic.county])}
                   </p>
+                  <div className="flex flex-wrap gap-4 mt-1 text-xs text-gray-600">
+                    <span>Owner: <span className="font-medium text-gray-800">{lic.ownerName || "-"}</span></span>
+                    {lic.phone && <span>Phone: <span className="font-medium text-gray-800">{lic.phone}</span></span>}
+                    {daysAgo !== null && <span>Filed: <span className="font-medium text-gray-800">{daysAgo} days ago</span></span>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
-                  {lic.licenseType && (
-                    <span
-                      className="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full cursor-help"
-                      title={typeInfo ? `${typeInfo.short} - ${typeInfo.description}` : lic.licenseType}
-                    >
-                      {lic.licenseType}{typeInfo ? ` · ${typeInfo.short}` : ""}
-                    </span>
-                  )}
-                  {lic.status && (
-                    <span className={`text-xs font-semibold ${statusColor}`}>{lic.status}</span>
-                  )}
-                  {daysAgo !== null && (
-                    <span className="text-xs text-gray-400">{daysAgo}d ago</span>
-                  )}
                   <svg
                     className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
@@ -661,7 +827,7 @@ export default function DashboardPage() {
                       </div>
                     )}
                     <Detail label="Status" value={lic.status} />
-                    <Detail label="Classification" value={effectiveClassification.replaceAll("_", " ")} />
+                    <Detail label="Classification" value={CLASSIFICATION_LABELS[effectiveClassification] ?? effectiveClassification.replaceAll("_", " ")} />
                     <Detail label="Classification Confidence" value={lic.newEstablishmentConfidence != null ? `${Math.round(lic.newEstablishmentConfidence * 100)}%` : null} />
                     <Detail label="Classification Reason" value={lic.newEstablishmentReason} />
                     <div className="col-span-2 sm:col-span-3 mt-1 rounded-lg border border-gray-200 p-3 bg-gray-50">
@@ -671,7 +837,7 @@ export default function DashboardPage() {
                           <p className="text-sm text-gray-600">Google, Comptroller, and Health enrichment are available on Pro and Enterprise plans.</p>
                           <a
                             href="/pricing"
-                            className="text-sm font-semibold text-amber-700 underline hover:text-amber-800"
+                            className="text-sm font-semibold accent underline hover:opacity-90"
                           >
                             Upgrade to unlock
                           </a>
@@ -727,7 +893,10 @@ export default function DashboardPage() {
                     ) : (
                       <>
                         <Detail label="Issue / Application Date" value={fmtDate(lic.applicationDate)} />
-                        <Detail label="Expiration Date" value={fmtDate(lic.expirationDate)} />
+                    {!isPendingApplication && lic.originalIssueDate && lic.originalIssueDate !== lic.applicationDate && (
+                      <Detail label="Original Issue Date" value={fmtDate(lic.originalIssueDate)} />
+                    )}
+                    <Detail label="Expiration Date" value={fmtDate(lic.expirationDate)} />
                       </>
                     )}
                     <div className="col-span-2 sm:col-span-3 flex flex-wrap gap-3 pt-1">
@@ -736,7 +905,7 @@ export default function DashboardPage() {
                           href={sourceRecordUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm font-medium text-amber-700 underline hover:text-amber-800"
+                          className="text-sm font-medium accent underline hover:opacity-90"
                         >
                           Open Texas source record
                         </a>
