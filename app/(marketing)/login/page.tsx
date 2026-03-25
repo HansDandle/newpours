@@ -54,6 +54,7 @@ export default function LoginPage() {
 
   return (
     <section className="min-h-[80vh] flex flex-col items-center justify-center gap-6">
+<<<<<<< HEAD
       <div className="bg-white rounded-2xl shadow-lg p-10 flex flex-col gap-4 border border-gray-100 max-w-sm w-full">
         <span className="text-3xl font-bold text-on-light text-center">PourScout</span>
         <p className="text-gray-500 text-sm text-center">
@@ -104,6 +105,11 @@ export default function LoginPage() {
           <div className="flex-1 h-px bg-gray-200" />
         </div>
 
+=======
+      <div className="bg-white rounded-2xl shadow-lg p-10 flex flex-col items-center gap-4 border border-gray-100 max-w-sm w-full">
+        <span className="text-3xl font-bold text-[#1a2233]">PourScout</span>
+        <p className="text-gray-500 text-sm text-center">Sign in to access your TABC license alerts dashboard.</p>
+>>>>>>> a45df05c0f1540283435cbb8679240d31bbe95a6
         <button
           className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 hover:border-[var(--brand-accent)] text-gray-700 font-medium px-6 py-3 rounded-lg shadow-sm transition"
           onClick={handleGoogleSignIn}
