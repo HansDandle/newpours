@@ -121,11 +121,11 @@ export interface ComptrollerMonthRecord {
 
 export interface ComptrollerEnrichment {
   taxpayerNumber: string;
-  monthlyRecords: ComptrollerMonthRecord[];
+  /** Monthly detail is stored in the `revenue` subcollection — not on the parent doc */
   latestMonthRevenue: number;
   avgMonthlyRevenue: number;
-  revenueTrend: 'up' | 'flat' | 'down';
-  revenueDataFrom: string;
+  revenueTrend?: 'up' | 'flat' | 'down';
+  revenueDataFrom?: string;
   revenueDataThrough: string;
   confidence: number;
   matchMethod: string;

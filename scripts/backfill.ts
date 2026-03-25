@@ -460,12 +460,17 @@ async function phase2_comptrollerBackfill() {
 
         if (matchId) {
           const ref = db.collection("establishments").doc(matchId);
+          // Write monthly detail to subcollection (idempotent, keeps parent lean)
+          const revenueRef = ref.collection("revenue").doc(month);
+          batch.set(revenueRef, monthRecord);
+          batchOps++;
+          // Update parent with aggregate stats only — no monthlyRecords array on parent
           batch.set(
             ref,
             {
               "comptroller.taxpayerNumber": r.taxpayer_number ?? "",
-              "comptroller.monthlyRecords": FieldValue.arrayUnion(monthRecord),
               "comptroller.latestMonthRevenue": monthRecord.totalReceipts,
+              "comptroller.avgMonthlyRevenue": monthRecord.totalReceipts,
               "comptroller.revenueDataThrough": month,
               "comptroller.confidence": confidence,
               "comptroller.matchMethod": matchMethod,

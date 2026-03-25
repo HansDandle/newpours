@@ -1,6 +1,6 @@
 "use client";
 import { use, useEffect, useState } from "react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { notFound } from "next/navigation";
 import { useAuth } from "@/components/shared/AuthProvider";
@@ -99,10 +99,16 @@ export default function EstablishmentDetailPage({ params }: { params: Promise<{ 
   const { id } = use(params);
 
   useEffect(() => {
-    getDoc(doc(db, "establishments", id))
-      .then((snap) => {
+    Promise.all([
+      getDoc(doc(db, "establishments", id)),
+      getDocs(query(collection(db, "establishments", id, "revenue"), orderBy("__name__", "desc"))),
+    ])
+      .then(([snap, revenueSnap]) => {
         if (!snap.exists()) { setNotFound404(true); return; }
-        setData({ _id: snap.id, ...normalizeDocData(snap.data() as Record<string, any>) });
+        const monthlyRecords = revenueSnap.docs.map((d) => ({ month: d.id, ...d.data() }));
+        const normalized = normalizeDocData(snap.data() as Record<string, any>);
+        normalized.comptroller = { ...normalized.comptroller, monthlyRecords };
+        setData({ _id: snap.id, ...normalized });
       })
       .finally(() => setLoading(false));
   }, [id]);

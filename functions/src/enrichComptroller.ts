@@ -123,6 +123,8 @@ export async function runComptrollerRevenueJob(options?: {
   const addressIndex = new Map<string, Array<{ id: string; name: string; address: string }>>();
   const nameCityIndex = new Map<string, Array<{ id: string; name: string; address: string }>>();
   const citySet = new Set<string>();
+  // Track existing revenue so we can compute month-over-month trend without extra reads
+  const existingRevenueIndex = new Map<string, number>(); // id → latestMonthRevenue
   for (const d of estSnap.docs) {
     const data = d.data();
     const estCounty = (data.county ?? '').toLowerCase().trim();
@@ -130,16 +132,22 @@ export async function runComptrollerRevenueJob(options?: {
     const city = (data.city ?? '').toLowerCase().trim();
     const key = `${normalizeAddressKey(data.address ?? '')}|${city}`;
     if (city) citySet.add(city);
+    const entry = { id: d.id, name: data.businessName ?? '', address: data.address ?? '' };
     const entries = addressIndex.get(key) ?? [];
-    entries.push({ id: d.id, name: data.businessName ?? '', address: data.address ?? '' });
+    entries.push(entry);
     addressIndex.set(key, entries);
 
     const normalizedBusinessName = normalizeName(data.businessName ?? data.tradeName ?? '');
     if (normalizedBusinessName && city) {
       const nameKey = `${normalizedBusinessName}|${city}`;
       const nameEntries = nameCityIndex.get(nameKey) ?? [];
-      nameEntries.push({ id: d.id, name: data.businessName ?? '', address: data.address ?? '' });
+      nameEntries.push(entry);
       nameCityIndex.set(nameKey, nameEntries);
+    }
+
+    const prevRevenue = Number(data.comptroller?.latestMonthRevenue ?? data['comptroller.latestMonthRevenue']);
+    if (Number.isFinite(prevRevenue) && prevRevenue > 0) {
+      existingRevenueIndex.set(d.id, prevRevenue);
     }
   }
 
@@ -217,23 +225,37 @@ export async function runComptrollerRevenueJob(options?: {
         if (matchIds.length > 0) {
           for (const match of matchIds) {
             const ref = db.collection('establishments').doc(match.id);
-            batch.set(ref, {
-              comptroller: {
-                taxpayerNumber: r.taxpayer_number ?? '',
-                monthlyRecords: admin.firestore.FieldValue.arrayUnion(monthRecord),
-                latestMonthRevenue: monthRecord.totalReceipts,
-                revenueDataThrough: month,
-                confidence: match.confidence,
-                matchMethod: match.matchMethod,
-              },
-              enrichment: {
-                comptroller: 'complete',
-              },
-            }, { merge: true });
+            // Write monthly detail to subcollection (idempotent by month ID, keeps parent doc lean)
+            const revenueRef = ref.collection('revenue').doc(month);
+            batch.set(revenueRef, monthRecord);
+            batchOps++;
+
+            // Compute month-over-month trend from in-memory index (no extra reads needed)
+            const prevRevenue = existingRevenueIndex.get(match.id) ?? 0;
+            let revenueTrend: string | null = null;
+            if (prevRevenue > 0 && monthRecord.totalReceipts > 0) {
+              const ratio = (monthRecord.totalReceipts - prevRevenue) / prevRevenue;
+              revenueTrend = ratio > 0.08 ? 'up' : ratio < -0.08 ? 'down' : 'flat';
+            }
+            // Update in-memory index for this session
+            existingRevenueIndex.set(match.id, monthRecord.totalReceipts);
+
+            // Update parent with aggregate stats only — no monthlyRecords array on parent
+            const parentUpdate: Record<string, unknown> = {
+              'comptroller.taxpayerNumber': r.taxpayer_number ?? '',
+              'comptroller.latestMonthRevenue': monthRecord.totalReceipts,
+              'comptroller.avgMonthlyRevenue': monthRecord.totalReceipts,
+              'comptroller.revenueDataThrough': month,
+              'comptroller.confidence': match.confidence,
+              'comptroller.matchMethod': match.matchMethod,
+              'enrichment.comptroller': 'complete',
+            };
+            if (revenueTrend) parentUpdate['comptroller.revenueTrend'] = revenueTrend;
+            batch.set(ref, parentUpdate, { merge: true });
             matched++;
             batchOps++;
             if (emitPerRecordLogs) {
-              await logEnrichment(match.id, 'success', `Appended ${month} revenue`, match.confidence);
+              await logEnrichment(match.id, 'success', `Wrote ${month} revenue to subcollection`, match.confidence);
             }
           }
         } else {

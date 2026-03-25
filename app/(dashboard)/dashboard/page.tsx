@@ -109,7 +109,6 @@ function normalizeEstablishmentEnrichment(raw: Record<string, any>): Establishme
     },
     comptroller: {
       ...(raw.comptroller ?? {}),
-      monthlyRecords: raw.comptroller?.monthlyRecords ?? raw["comptroller.monthlyRecords"],
       latestMonthRevenue: raw.comptroller?.latestMonthRevenue ?? raw["comptroller.latestMonthRevenue"],
       avgMonthlyRevenue: raw.comptroller?.avgMonthlyRevenue ?? raw["comptroller.avgMonthlyRevenue"],
       revenueTrend: raw.comptroller?.revenueTrend ?? raw["comptroller.revenueTrend"],

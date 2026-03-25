@@ -306,18 +306,15 @@ function getRevenueForMonth(estData: Record<string, any>, revenueMonth?: string)
     return Number.isFinite(latest) ? latest : null;
   }
 
+  // Monthly records now live in the revenue subcollection; only latestMonthRevenue is on the parent.
+  // For historical month lookups, return latestMonthRevenue if it matches; otherwise null.
   const latestMonth = String(estData.comptroller?.revenueDataThrough ?? estData['comptroller.revenueDataThrough'] ?? '');
   if (latestMonth === revenueMonth) {
     const latest = Number(estData.comptroller?.latestMonthRevenue ?? estData['comptroller.latestMonthRevenue']);
     return Number.isFinite(latest) ? latest : null;
   }
 
-  const monthlyRecords = (estData.comptroller?.monthlyRecords ?? estData['comptroller.monthlyRecords'] ?? []) as Array<Record<string, any>>;
-  const monthRecord = monthlyRecords.find((record) => String(record.month ?? '') === revenueMonth);
-  if (!monthRecord) return null;
-
-  const totalReceipts = Number(monthRecord.totalReceipts ?? 0);
-  return Number.isFinite(totalReceipts) ? totalReceipts : null;
+  return null;
 }
 
 export async function enrichGooglePlacesForEstablishment(

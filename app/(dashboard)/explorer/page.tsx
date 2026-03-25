@@ -47,7 +47,6 @@ type ExplorerRow = {
   };
   comptroller?: {
     taxpayerNumber?: string;
-    monthlyRecords?: Array<{ month: string; totalReceipts: number }>;
     latestMonthRevenue?: number;
     avgMonthlyRevenue?: number;
     revenueTrend?: RevenueTrend;
@@ -154,27 +153,7 @@ function normalizeName(value?: string) {
     .trim();
 }
 
-function deriveAvgRevenue(monthlyRecords?: Array<{ totalReceipts: number }>) {
-  if (!monthlyRecords?.length) return undefined;
-  const totals = monthlyRecords.map((record) => Number(record.totalReceipts ?? 0)).filter((value) => Number.isFinite(value));
-  if (!totals.length) return undefined;
-  return Math.round(totals.reduce((sum, value) => sum + value, 0) / totals.length);
-}
-
-function deriveRevenueTrend(monthlyRecords?: Array<{ month: string; totalReceipts: number }>): RevenueTrend | undefined {
-  if (!monthlyRecords || monthlyRecords.length < 2) return undefined;
-  const sorted = [...monthlyRecords].sort((left, right) => right.month.localeCompare(left.month));
-  const latest = Number(sorted[0]?.totalReceipts ?? 0);
-  const prior = Number(sorted[1]?.totalReceipts ?? 0);
-  if (!Number.isFinite(latest) || !Number.isFinite(prior) || prior === 0) return undefined;
-  const ratio = (latest - prior) / prior;
-  if (ratio > 0.08) return "up";
-  if (ratio < -0.08) return "down";
-  return "flat";
-}
-
 function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
-  const monthlyRecords = (raw.comptroller?.monthlyRecords ?? raw["comptroller.monthlyRecords"] ?? []) as Array<{ month: string; totalReceipts: number }>;
   return {
     id,
     businessName: raw.businessName ?? raw.tradeName ?? "Unnamed Venue",
@@ -213,10 +192,9 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
     comptroller: {
       ...(raw.comptroller ?? {}),
       taxpayerNumber: raw.comptroller?.taxpayerNumber ?? raw["comptroller.taxpayerNumber"],
-      monthlyRecords,
       latestMonthRevenue: raw.comptroller?.latestMonthRevenue ?? raw["comptroller.latestMonthRevenue"],
-      avgMonthlyRevenue: raw.comptroller?.avgMonthlyRevenue ?? raw["comptroller.avgMonthlyRevenue"] ?? deriveAvgRevenue(monthlyRecords),
-      revenueTrend: raw.comptroller?.revenueTrend ?? raw["comptroller.revenueTrend"] ?? deriveRevenueTrend(monthlyRecords),
+      avgMonthlyRevenue: raw.comptroller?.avgMonthlyRevenue ?? raw["comptroller.avgMonthlyRevenue"],
+      revenueTrend: raw.comptroller?.revenueTrend ?? raw["comptroller.revenueTrend"],
       revenueDataThrough: raw.comptroller?.revenueDataThrough ?? raw["comptroller.revenueDataThrough"],
       confidence: raw.comptroller?.confidence ?? raw["comptroller.confidence"],
       matchMethod: raw.comptroller?.matchMethod ?? raw["comptroller.matchMethod"],

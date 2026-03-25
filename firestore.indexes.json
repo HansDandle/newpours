@@ -17,6 +17,41 @@
         {"fieldPath": "userId", "order": "ASCENDING"},
         {"fieldPath": "deliveredAt", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "establishments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "newEstablishmentClassification", "order": "ASCENDING"},
+        {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "establishments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "status", "order": "ASCENDING"},
+        {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "establishments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "licenseType", "order": "ASCENDING"},
+        {"fieldPath": "newEstablishmentClassification", "order": "ASCENDING"},
+        {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "establishments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

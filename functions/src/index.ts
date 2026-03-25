@@ -7,3 +7,4 @@ export { processAdminTrigger } from './adminTriggers';
 export { alertFanout } from './alertFanout';
 export { sendDailyDigest } from './emailDigest';
 export { stripeWebhook } from './stripeWebhook';
+export { generateDailySummary } from './generateSummary';

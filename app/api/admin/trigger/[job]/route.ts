@@ -172,21 +172,16 @@ async function buildPreview(
         }
 
         if (revenueMonth || minRevenue != null) {
+          // Monthly records now live in subcollection; preview estimation uses latestMonthRevenue
+          // as a proxy. Exact historical month filtering isn't available in the preview estimator.
           const latestMonth = String(data.comptroller?.revenueDataThrough ?? data["comptroller.revenueDataThrough"] ?? "");
-          let revenue: number | null = null;
+          const latestRevenue = Number(data.comptroller?.latestMonthRevenue ?? data["comptroller.latestMonthRevenue"]);
+          const revenue = Number.isFinite(latestRevenue) && latestRevenue > 0 ? latestRevenue : null;
+
+          // If a specific month is requested but doesn't match latest, include conservatively
           if (!revenueMonth || latestMonth === revenueMonth) {
-            const latestRevenue = Number(data.comptroller?.latestMonthRevenue ?? data["comptroller.latestMonthRevenue"]);
-            revenue = Number.isFinite(latestRevenue) ? latestRevenue : null;
+            if (revenue == null || (minRevenue != null && revenue < minRevenue)) return false;
           }
-
-          if (revenueMonth && latestMonth !== revenueMonth) {
-            const monthlyRecords = (data.comptroller?.monthlyRecords ?? data["comptroller.monthlyRecords"] ?? []) as Array<Record<string, any>>;
-            const monthRecord = monthlyRecords.find((record) => String(record.month ?? "") === revenueMonth);
-            const monthRevenue = Number(monthRecord?.totalReceipts ?? 0);
-            revenue = Number.isFinite(monthRevenue) && monthRecord ? monthRevenue : null;
-          }
-
-          if (revenue == null || (minRevenue != null && revenue < minRevenue)) return false;
         }
       }
 
