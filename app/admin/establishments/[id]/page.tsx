@@ -278,6 +278,18 @@ export default function EstablishmentDetailPage({ params }: { params: Promise<{ 
         </Section>
       )}
 
+      {/* TCAD Property Data */}
+      {data.propertyData && (
+        <Section title="TCAD Property Data">
+          <Field label="Viability Score" value={typeof data.propertyData.viabilityScore === "number" ? data.propertyData.viabilityScore.toFixed(2) : undefined} />
+          <Field label="Property Class" value={data.propertyData.propClass} />
+          <Field label="Improvement Types" value={Array.isArray(data.propertyData.improvements) && data.propertyData.improvements.length ? data.propertyData.improvements.join(", ") : undefined} />
+          <Field label="TCAD DBA Name" value={data.propertyData.dba} />
+          <Field label="Property Owner" value={data.propertyData.ownerName} />
+          <Field label="TCAD Prop ID" value={data.propertyData.propId} />
+        </Section>
+      )}
+
       {/* Raw JSON */}
       <Section title="Raw Firestore Document">
         <pre className="text-xs text-gray-400 overflow-auto max-h-64 bg-gray-900 p-3 rounded">

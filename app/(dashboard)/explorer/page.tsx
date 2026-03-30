@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
+import { getLicenseTypeInfo } from "@/lib/tabc-license-types";
 
 const EXPLORER_STORAGE_KEY = "newpours.explorer.filters.v1";
 
@@ -28,6 +29,8 @@ type ExplorerRow = {
   mailCity?: string;
   email?: string;
   applicationDate?: any;
+  originalIssueDate?: string | null;
+  expirationDate?: any;
   firstSeenAt?: any;
   classification?: string;
   enrichment: {
@@ -64,6 +67,13 @@ type ExplorerRow = {
     hasSignificantRecentWork?: boolean;
     largestRecentPermitValue?: number;
   };
+  propertyData?: {
+    propClass?: string;
+    improvements?: string[];
+    dba?: string;
+    ownerName?: string;
+    viabilityScore?: number;
+  };
 };
 
 type SortKey =
@@ -77,12 +87,12 @@ type SortKey =
 
 type FilterState = {
   search: string;
-  county: string;
-  city: string;
+  county: string[];
+  city: string[];
   zipCode: string;
   status: string;
-  classification: string;
-  licenseType: string;
+  classification: string[];
+  licenseType: string[];
   revenueMin: string;
   revenueMax: string;
   ratingMin: string;
@@ -95,12 +105,12 @@ type FilterState = {
 
 const DEFAULT_FILTERS: FilterState = {
   search: "",
-  county: "",
-  city: "",
+  county: [],
+  city: [],
   zipCode: "",
   status: "",
-  classification: "",
-  licenseType: "",
+  classification: [],
+  licenseType: [],
   revenueMin: "",
   revenueMax: "",
   ratingMin: "",
@@ -110,6 +120,74 @@ const DEFAULT_FILTERS: FilterState = {
   sortKey: "latestRevenue",
   sortDir: "desc",
 };
+
+function MultiSelectDropdown({
+  placeholder,
+  options,
+  selected,
+  onChange,
+  className,
+}: {
+  placeholder: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onChange: (values: string[]) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, []);
+
+  const displayLabel =
+    selected.length === 0
+      ? placeholder
+      : selected.length === 1
+      ? (options.find((o) => o.value === selected[0])?.label ?? selected[0])
+      : `${selected.length} selected`;
+
+  return (
+    <div ref={ref} className={`relative ${className ?? ""}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-1 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-left hover:border-slate-400"
+      >
+        <span className={selected.length === 0 ? "text-slate-500 truncate" : "text-slate-800 truncate"}>{displayLabel}</span>
+        <span className="shrink-0 text-slate-400 text-xs">▾</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-72 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+          <div className="sticky top-0 flex gap-3 px-3 py-2 bg-white border-b border-slate-100 text-xs">
+            <button type="button" onClick={() => onChange(options.map((o) => o.value))} className="accent font-semibold hover:underline">All</button>
+            <span className="text-slate-300">·</span>
+            <button type="button" onClick={() => onChange([])} className="text-slate-500 hover:underline">None</button>
+            {selected.length > 0 && <span className="ml-auto text-slate-400">{selected.length} of {options.length}</span>}
+          </div>
+          {options.map((opt) => (
+            <label key={opt.value} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={selected.includes(opt.value)}
+                onChange={(e) =>
+                  onChange(e.target.checked ? [...selected, opt.value] : selected.filter((v) => v !== opt.value))
+                }
+                className="accent-[var(--brand-accent)] shrink-0"
+              />
+              <span className="text-sm text-slate-700 truncate">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatCurrency(value?: number | null) {
   if (value == null || Number.isNaN(value)) return "No revenue";
@@ -171,6 +249,8 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
     mailCity: raw.mailCity,
     email: raw.email,
     applicationDate: raw.applicationDate,
+    originalIssueDate: raw.originalIssueDate ?? null,
+    expirationDate: raw.expirationDate ?? null,
     firstSeenAt: raw.firstSeenAt,
     classification: raw.newEstablishmentClassification,
     enrichment: {
@@ -211,6 +291,13 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
       hasSignificantRecentWork: raw.buildingPermits?.hasSignificantRecentWork,
       largestRecentPermitValue: raw.buildingPermits?.largestRecentPermitValue,
     },
+    propertyData: raw.propertyData ? {
+      propClass: raw.propertyData.propClass,
+      improvements: raw.propertyData.improvements,
+      dba: raw.propertyData.dba,
+      ownerName: raw.propertyData.ownerName,
+      viabilityScore: raw.propertyData.viabilityScore,
+    } : undefined,
   };
 }
 
@@ -242,6 +329,8 @@ export default function ExplorerPage() {
   const [hydrated, setHydrated] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [enrichingFiltered, setEnrichingFiltered] = useState(false);
+  const [enrichingHealth, setEnrichingHealth] = useState(false);
+  const [enrichingRevenue, setEnrichingRevenue] = useState(false);
   const [onlyMissingGoogle, setOnlyMissingGoogle] = useState(true);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
 
@@ -249,8 +338,18 @@ export default function ExplorerPage() {
     try {
       const raw = localStorage.getItem(EXPLORER_STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<FilterState>;
-        setFilters({ ...DEFAULT_FILTERS, ...parsed });
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        // Migrate old single-string values to arrays
+        const toArray = (v: unknown): string[] =>
+          Array.isArray(v) ? v : typeof v === "string" && v ? [v] : [];
+        setFilters({
+          ...DEFAULT_FILTERS,
+          ...(parsed as Partial<FilterState>),
+          county: toArray(parsed.county),
+          city: toArray(parsed.city),
+          classification: toArray(parsed.classification),
+          licenseType: toArray(parsed.licenseType),
+        });
       }
     } catch {
     } finally {
@@ -296,10 +395,31 @@ export default function ExplorerPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const counties = useMemo(() => Array.from(new Set(rows.map((row) => row.county).filter(Boolean) as string[])).sort(), [rows]);
-  const cities = useMemo(() => Array.from(new Set(rows.map((row) => row.city).filter(Boolean) as string[])).sort(), [rows]);
-  const licenseTypes = useMemo(() => Array.from(new Set(rows.map((row) => row.licenseType).filter(Boolean) as string[])).sort(), [rows]);
-  const classifications = useMemo(() => Array.from(new Set(rows.map((row) => row.classification).filter(Boolean) as string[])).sort(), [rows]);
+  const countyOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.county).filter(Boolean) as string[])).sort().map((v) => ({ value: v, label: v })),
+    [rows]
+  );
+  const cityOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.city).filter(Boolean) as string[])).sort().map((v) => ({ value: v, label: v })),
+    [rows]
+  );
+  const licenseTypeOptions = useMemo(
+    () =>
+      Array.from(new Set(rows.map((r) => r.licenseType).filter(Boolean) as string[]))
+        .sort()
+        .map((code) => {
+          const info = getLicenseTypeInfo(code);
+          return { value: code, label: info ? `${code} — ${info.short}` : code };
+        }),
+    [rows]
+  );
+  const classificationOptions = useMemo(
+    () =>
+      Array.from(new Set(rows.map((r) => r.classification).filter(Boolean) as string[]))
+        .sort()
+        .map((v) => ({ value: v, label: v.replaceAll("_", " ") })),
+    [rows]
+  );
 
   const filteredRows = useMemo(() => {
     const revenueMin = Number(filters.revenueMin || 0);
@@ -315,12 +435,12 @@ export default function ExplorerPage() {
       const hasWebsite = Boolean(row.googlePlaces?.website);
       const hasPermits = Boolean(row.buildingPermits?.hasSignificantRecentWork || row.buildingPermits?.recentPermits?.length);
 
-      if (filters.county && row.county !== filters.county) return false;
-      if (filters.city && row.city !== filters.city) return false;
+      if (filters.county.length > 0 && !filters.county.includes(row.county ?? "")) return false;
+      if (filters.city.length > 0 && !filters.city.includes(row.city ?? "")) return false;
       if (filters.zipCode && row.zipCode !== filters.zipCode) return false;
       if (filters.status && row.status !== filters.status) return false;
-      if (filters.classification && row.classification !== filters.classification) return false;
-      if (filters.licenseType && row.licenseType !== filters.licenseType) return false;
+      if (filters.classification.length > 0 && !filters.classification.includes(row.classification ?? "")) return false;
+      if (filters.licenseType.length > 0 && !filters.licenseType.includes(row.licenseType ?? "")) return false;
       if (filters.revenueMin && latestRevenue < revenueMin) return false;
       if (filters.revenueMax && latestRevenue > revenueMax) return false;
       if (filters.ratingMin && rating < ratingMin) return false;
@@ -482,6 +602,56 @@ export default function ExplorerPage() {
     }
   };
 
+  const runHealthEnrichForFiltered = async () => {
+    if (!user || !isAdmin || enrichingHealth) return;
+    const county = filters.county.length === 1 ? filters.county[0] : undefined;
+    const scope = county ? `county: ${county}` : filters.county.length > 1 ? `${filters.county.length} counties` : "all counties";
+    if (!window.confirm(`Queue health inspection enrichment for ${filteredRows.length.toLocaleString()} visible venue(s) (${scope}, up to 500 processed)?`)) return;
+    setEnrichingHealth(true);
+    setAdminMessage(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/admin/trigger/health_inspections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ county, lookbackMonths: 24 }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      setAdminMessage(res.ok
+        ? `Queued health inspection enrichment (${scope}).`
+        : `Queue failed: ${payload?.error ?? "unknown error"}`);
+    } catch {
+      setAdminMessage("Queue failed due to a network or auth error.");
+    } finally {
+      setEnrichingHealth(false);
+    }
+  };
+
+  const runRevenueEnrichForFiltered = async () => {
+    if (!user || !isAdmin || enrichingRevenue) return;
+    const county = filters.county.length === 1 ? filters.county[0] : undefined;
+    const scope = county ? `county: ${county}` : filters.county.length > 1 ? `${filters.county.length} counties` : "all counties";
+    if (!window.confirm(`Queue comptroller revenue update for ${scope}? This pulls the latest month of sales data.`)) return;
+    setEnrichingRevenue(true);
+    setAdminMessage(null);
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch("/api/admin/trigger/comptroller_update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ county, lookbackMonths: 1 }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      setAdminMessage(res.ok
+        ? `Queued comptroller revenue update (${scope}).`
+        : `Queue failed: ${payload?.error ?? "unknown error"}`);
+    } catch {
+      setAdminMessage("Queue failed due to a network or auth error.");
+    } finally {
+      setEnrichingRevenue(false);
+    }
+  };
+
   return (
     <section className="space-y-6">
       <div className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] p-6 shadow-sm">
@@ -513,14 +683,18 @@ export default function ExplorerPage() {
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 xl:grid-cols-6 md:grid-cols-3">
             <input value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} placeholder="Search venue, owner, address, license #" className="xl:col-span-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[var(--brand-accent)]" />
-            <select value={filters.county} onChange={(event) => setFilters((prev) => ({ ...prev, county: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
-              <option value="">All counties</option>
-              {counties.map((county) => <option key={county} value={county}>{county}</option>)}
-            </select>
-            <select value={filters.city} onChange={(event) => setFilters((prev) => ({ ...prev, city: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
-              <option value="">All cities</option>
-              {cities.map((city) => <option key={city} value={city}>{city}</option>)}
-            </select>
+            <MultiSelectDropdown
+              placeholder="All counties"
+              options={countyOptions}
+              selected={filters.county}
+              onChange={(v) => setFilters((prev) => ({ ...prev, county: v }))}
+            />
+            <MultiSelectDropdown
+              placeholder="All cities"
+              options={cityOptions}
+              selected={filters.city}
+              onChange={(v) => setFilters((prev) => ({ ...prev, city: v }))}
+            />
             <input value={filters.zipCode} onChange={(event) => setFilters((prev) => ({ ...prev, zipCode: event.target.value }))} placeholder="ZIP" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
             <select value={filters.sortKey} onChange={(event) => setFilters((prev) => ({ ...prev, sortKey: event.target.value as SortKey }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
               <option value="latestRevenue">Sort: Latest Revenue</option>
@@ -540,14 +714,18 @@ export default function ExplorerPage() {
               <option value="Active">Active</option>
               <option value="Expired">Expired</option>
             </select>
-            <select value={filters.classification} onChange={(event) => setFilters((prev) => ({ ...prev, classification: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
-              <option value="">All classes</option>
-              {classifications.map((classification) => <option key={classification} value={classification}>{classification.replaceAll("_", " ")}</option>)}
-            </select>
-            <select value={filters.licenseType} onChange={(event) => setFilters((prev) => ({ ...prev, licenseType: event.target.value }))} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
-              <option value="">All license types</option>
-              {licenseTypes.map((licenseType) => <option key={licenseType} value={licenseType}>{licenseType}</option>)}
-            </select>
+            <MultiSelectDropdown
+              placeholder="All classes"
+              options={classificationOptions}
+              selected={filters.classification}
+              onChange={(v) => setFilters((prev) => ({ ...prev, classification: v }))}
+            />
+            <MultiSelectDropdown
+              placeholder="All license types"
+              options={licenseTypeOptions}
+              selected={filters.licenseType}
+              onChange={(v) => setFilters((prev) => ({ ...prev, licenseType: v }))}
+            />
             <input value={filters.revenueMin} onChange={(event) => setFilters((prev) => ({ ...prev, revenueMin: event.target.value }))} placeholder="Revenue min" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
             <input value={filters.revenueMax} onChange={(event) => setFilters((prev) => ({ ...prev, revenueMax: event.target.value }))} placeholder="Revenue max" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
             <input value={filters.ratingMin} onChange={(event) => setFilters((prev) => ({ ...prev, ratingMin: event.target.value }))} placeholder="Min rating" className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800" />
@@ -572,7 +750,21 @@ export default function ExplorerPage() {
                   disabled={enrichingFiltered || filteredRows.length === 0}
                   className="rounded-full btn-accent px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {enrichingFiltered ? "Queueing..." : "Admin: Enrich filtered list"}
+                  {enrichingFiltered ? "Queueing..." : "Admin: Google Places"}
+                </button>
+                <button
+                  onClick={runHealthEnrichForFiltered}
+                  disabled={enrichingHealth || filteredRows.length === 0}
+                  className="rounded-full border border-slate-400 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {enrichingHealth ? "Queueing..." : "Admin: Health inspections"}
+                </button>
+                <button
+                  onClick={runRevenueEnrichForFiltered}
+                  disabled={enrichingRevenue || filteredRows.length === 0}
+                  className="rounded-full border border-slate-400 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {enrichingRevenue ? "Queueing..." : "Admin: Revenue data"}
                 </button>
               </>
             ) : null}
@@ -688,8 +880,16 @@ export default function ExplorerPage() {
 
                 <div className="grid gap-3 text-sm text-slate-600">
                   <DetailRow label="License" value={[selected.licenseType, selected.licenseTypeLabel].filter(Boolean).join(" · ") || "--"} />
-                  <DetailRow label="License Number" value={selected.licenseNumber || "--"} />
+                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2">
+                    <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">License Number</span>
+                    {selected.licenseNumber
+                      ? <a href={`/admin/establishments/${selected.id}`} target="_blank" rel="noopener noreferrer" className="text-right text-sm text-blue-600 hover:underline">{selected.licenseNumber}</a>
+                      : <span className="text-right text-sm text-slate-700">--</span>
+                    }
+                  </div>
                   <DetailRow label="Classification" value={selected.classification ? selected.classification.replaceAll("_", " ") : "--"} />
+                  <DetailRow label="Original License Date" value={selected.originalIssueDate ? formatDate(selected.originalIssueDate) : "--"} />
+                  <DetailRow label="Expiration Date" value={selected.expirationDate ? formatDate(selected.expirationDate) : "--"} />
                   <DetailRow label="Address" value={[selected.address, selected.city, selected.county, selected.zipCode].filter(Boolean).join(", ") || "--"} />
                   <DetailRow label="Revenue Confidence" value={selected.comptroller?.confidence != null ? `${Math.round(selected.comptroller.confidence * 100)}%` : "--"} />
                   <DetailRow label="Match Method" value={selected.comptroller?.matchMethod || "--"} />
@@ -705,6 +905,12 @@ export default function ExplorerPage() {
                   <EmailRow id={selected.id} initialEmail={selected.email} isAdmin={isAdmin} />
                   <DetailRow label="Latest Inspection" value={selected.healthInspection?.latestInspectionDate ? `${selected.healthInspection.latestScore ?? "--"} on ${formatDate(selected.healthInspection.latestInspectionDate)}` : "No inspection data"} />
                   <DetailRow label="Permit Signal" value={selected.buildingPermits?.hasSignificantRecentWork ? `Recent permit value ${formatCurrency(selected.buildingPermits?.largestRecentPermitValue)}` : "No major permit signal"} />
+                  {selected.propertyData?.propClass && (
+                    <DetailRow label="Property Class" value={`${selected.propertyData.propClass}${selected.propertyData.improvements?.length ? ` · ${selected.propertyData.improvements.join(", ")}` : ""}`} />
+                  )}
+                  {selected.propertyData?.ownerName && (
+                    <DetailRow label="Property Owner" value={selected.propertyData.ownerName} />
+                  )}
                   <DetailRow label="First Seen" value={formatDate(selected.firstSeenAt || selected.applicationDate)} />
                 </div>
               </div>

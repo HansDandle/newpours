@@ -12,6 +12,8 @@ import { runComptrollerRevenueJob } from './enrichComptroller';
 import { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';
 import { googleMapsApiKeySecret, runGooglePlacesJob } from './enrich';
 import { runBuildingPermitsJob } from './enrichBuildingPermits';
+import { runPropertyDataJob } from './enrichPropertyData';
+import { runGenerateSummary } from './generateSummary';
 
 if (!admin.apps.length) admin.initializeApp();
 const db = admin.firestore();
@@ -386,6 +388,16 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.processed;
         notes = `Building permits (${lookbackMonths}mo${countyFilter ? `, county=${countyFilter}` : ''}): complete=${result.complete}, no_match=${result.noMatch}, unavailable=${result.unavailable}, error=${result.error}`;
+      } else if (jobName === 'property_data') {
+        const result = await runPropertyDataJob({
+          county: countyFilter || undefined,
+        });
+        processed = result.processed;
+        notes = `TCAD property data (${countyFilter ? `county=${countyFilter}` : 'all'}): complete=${result.complete}, no_match=${result.noMatch}, error=${result.error}`;
+      } else if (jobName === 'generate_summary') {
+        const result = await runGenerateSummary();
+        processed = result.count;
+        notes = `Summary snapshot written: ${result.count} establishments, ${result.sizeBytes} bytes gzipped`;
       } else {
         finalStatus = 'partial';
         notes = `Admin trigger job '${jobName}' acknowledged but not implemented in processAdminTrigger yet.`;

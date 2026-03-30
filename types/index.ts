@@ -190,6 +190,7 @@ export interface EnrichmentMap {
   comptroller: EnrichmentStatus;
   healthInspection: EnrichmentStatus | 'unavailable';
   buildingPermits: EnrichmentStatus | 'unavailable';
+  propertyData?: EnrichmentStatus | 'no_match';
   lastEnrichedAt?: any;
 }
 
@@ -216,6 +217,9 @@ export interface EnrichmentLog {
   confidence?: number;
   matchMethod?: string;
   message: string;
+  candidatePlaceId?: string;
+  candidateName?: string;
+  candidateAddress?: string;
 }
 
 export interface BackfillStatus {

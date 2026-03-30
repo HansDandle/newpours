@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Daily summary snapshot — public read, no sensitive data
+    match /cache/establishments-summary.json.gz {
+      allow read: if true;
+      allow write: if false; // written by Admin SDK only
+    }
+    // Everything else is locked down
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

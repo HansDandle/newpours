@@ -99,7 +99,8 @@ async function logEnrichment(
   status: 'success' | 'skip' | 'error',
   message: string,
   confidence?: number,
-  matchMethod?: string
+  matchMethod?: string,
+  candidate?: { placeId: string; name: string; address: string }
 ) {
   try {
     await db.collection('system/enrichmentLogs/items').add({
@@ -110,6 +111,11 @@ async function logEnrichment(
       confidence: confidence ?? null,
       matchMethod: matchMethod ?? null,
       message,
+      ...(candidate ? {
+        candidatePlaceId: candidate.placeId,
+        candidateName: candidate.name,
+        candidateAddress: candidate.address,
+      } : {}),
     });
   } catch (e) {
     console.error('Failed to write enrichment log', e);
@@ -230,9 +236,10 @@ async function enrichWithGooglePlaces(
       docId,
       'googlePlaces',
       'skip',
-      `Confidence ${confidence.toFixed(2)} below threshold (name=${best.nameSim.toFixed(2)}, address=${best.addrSim.toFixed(2)}, zip_match=${zipMatch})`,  
+      `Confidence ${confidence.toFixed(2)} below threshold (name=${best.nameSim.toFixed(2)}, address=${best.addrSim.toFixed(2)}, zip_match=${zipMatch})`,
       confidence,
-      'name+address'
+      'name+address',
+      { placeId: top.place_id, name: best.placeName, address: best.placeAddress }
     );
     return 'no_match';
   }

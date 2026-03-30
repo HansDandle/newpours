@@ -12,6 +12,8 @@ const VALID_JOBS = [
   "google_places_refresh",
   "health_inspections",
   "building_permits",
+  "property_data",
+  "generate_summary",
 ];
 
 function toSocrataDate(date: Date): string {

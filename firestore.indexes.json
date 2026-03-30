@@ -52,6 +52,13 @@
         {"fieldPath": "county", "order": "ASCENDING"},
         {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "revenue",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {"fieldPath": "__name__", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

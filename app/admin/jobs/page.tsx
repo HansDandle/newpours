@@ -12,6 +12,7 @@ const JOBS = [
   { key: "google_places_refresh", label: "Google Places Refresh" },
   { key: "health_inspections", label: "Health Inspections" },
   { key: "building_permits", label: "Building Permits" },
+  { key: "property_data", label: "TCAD Property Data" },
 ];
 
 function statusBadge(status: string) {
