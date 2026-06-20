@@ -40,8 +40,11 @@ const GROUPS = [
     venues: ['uncle nicky', 'murray', 'dirdie birdie', 'nickel city'] },
   { name: 'MaieB Hospitality', aliases: ['maieb', 'fojtasek', 'edgerton', 'olamaie'],
     venues: ['olamaie'] },
-  { name: 'Suerte Restaurant Group', aliases: ['suerte', 'hellman mass', 'fermin nunez'],
-    venues: ['suerte', 'karaz'] },
+  // "este" omitted as a keyword — too short, substring-matches unrelated names.
+  { name: 'Suerte Restaurant Group', aliases: ['suerte', 'bar toti', 'hellman mass', 'fermin nunez'],
+    venues: ['suerte', 'bar toti', 'karaz'] },
+  { name: 'Lenoir', aliases: ['lenoir', 'duplechan', 'jessica maher'],
+    venues: ['lenoir', 'vixen'] },
   { name: 'TC4 & Co.', aliases: ['tc4', 'tony ciola', 'creed ford'],
     venues: ['mighty fine', 'league kitchen', 'tony c', 'cousin louie'] },
   { name: 'ELM Restaurant Group', aliases: ['elm', 'elm restaurant'],
@@ -50,6 +53,12 @@ const GROUPS = [
     venues: ['lavaca street bar', 'scoot inn', 'mean eyed cat', 'cain abel'] },
   { name: 'MoonlightATX', aliases: ['moonlightatx', 'moonlight atx', 'twin bar management', 'twin bar', 'dirty 6th'], mail: ['407 e 6th'],
     venues: ['thirsty nickel', 'toulouse', 'jackalope', 'dizzy rooster'] },
+  // Leona Botanical Café & Bar — Dee Dee × Veracruz partnership (single, new venue).
+  // Alias-only: too new to have a reliable TABC mailing-address cluster.
+  { name: 'Leona Botanical', aliases: ['leona botanical', 'leona cafe'] },
+  // Multi-location independent brands.
+  { name: 'Veracruz All Natural', aliases: ['veracruz all natural', 'veracruz'], owner: ['veracruz'] },
+  { name: 'Dee Dee', aliases: ['dee dee'], owner: ['dee dee'] },
   // Single-concept local chains — match by brand name (alias + owner), NOT
   // mailing address (locations mail to varied/airport-concession addresses).
   { name: 'Kerbey Lane Cafe', aliases: ['kerbey lane', 'kerbey'], owner: ['kerbey lane'] },
