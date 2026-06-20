@@ -30,6 +30,24 @@ export const OPERATORS: OperatorDef[] = [
     mailAddressContains: ['1711 s congress'],
     ownerContains: ['word of mouth mml', 'mml 2021'],
   },
+  {
+    key: 'elm-restaurant-group',
+    name: 'ELM Restaurant Group',
+    aliases: ['elm restaurant group', 'elm hospitality'],
+    mailAddressContains: ['511 w 7th'],
+  },
+  {
+    key: 'dirty-sixth-bars',
+    name: 'Dirty 6th Bar Group',
+    aliases: ['dirty 6th bar group', 'dirty sixth', 'dirty 6th'],
+    mailAddressContains: ['407 e 6th'],
+  },
+  {
+    key: 'fbr-management',
+    name: 'FBR Management',
+    aliases: ['fbr management', 'fbr', '801 springdale'],
+    mailAddressContains: ['801 springdale'],
+  },
 ];
 
 function norm(value?: string): string {
