@@ -38,6 +38,17 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const fmtMdy = (d: Date) => `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
 const isoDay = (s?: string | null) => (s ? new Date(s).toISOString().slice(0, 10) : null);
 
+/** fetch() with an abort timeout so one slow TDLR response can't stall the run. */
+async function fetchWithTimeout(url: string, opts: RequestInit = {}, ms = 15000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface TabsListRow {
   ProjectNumber: string;
   FacilityName?: string;
@@ -64,7 +75,7 @@ async function searchCounty(countyId: number, beginStr: string, endStr: string):
       RegistrationDateBegin: beginStr,
       RegistrationDateEnd: endStr,
     });
-    const res = await fetch(SEARCH_URL, {
+    const res = await fetchWithTimeout(SEARCH_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -72,7 +83,7 @@ async function searchCounty(countyId: number, beginStr: string, endStr: string):
         'User-Agent': 'newpours-tabs-ingest/1.0',
       },
       body,
-    });
+    }, 20000);
     if (!res.ok) throw new Error(`SearchProjects HTTP ${res.status}`);
     const json = (await res.json()) as { recordsFiltered?: number; recordsTotal?: number; data?: TabsListRow[] };
     total = json.recordsFiltered ?? json.recordsTotal ?? 0;
@@ -144,9 +155,9 @@ interface TabsDetail {
 }
 
 async function fetchDetail(projectNumber: string): Promise<TabsDetail | null> {
-  const res = await fetch(DETAIL_URL(projectNumber), {
+  const res = await fetchWithTimeout(DETAIL_URL(projectNumber), {
     headers: { 'User-Agent': 'newpours-tabs-ingest/1.0' },
-  });
+  }, 15000);
   if (!res.ok) return null;
   const html = await res.text();
 
@@ -204,12 +215,16 @@ export async function runTabsJob(options?: {
   const beginStr = fmtMdy(begin);
   const endStr = fmtMdy(end);
 
-  // 1. enumerate
+  // 1. enumerate (one county failing shouldn't abort the others)
   let projects: TabsListRow[] = [];
   for (const name of counties) {
     const id = COUNTY_IDS[name.trim().toLowerCase()];
-    const rows = await searchCounty(id, beginStr, endStr);
-    projects.push(...rows);
+    try {
+      const rows = await searchCounty(id, beginStr, endStr);
+      projects.push(...rows);
+    } catch (err) {
+      console.error(`TABS search failed for ${name}:`, err);
+    }
   }
   if (minCost) projects = projects.filter((p) => Number(p.EstimatedCost ?? 0) >= minCost);
   projects.sort((a, b) => new Date(b.ProjectCreatedOn ?? 0).getTime() - new Date(a.ProjectCreatedOn ?? 0).getTime());
