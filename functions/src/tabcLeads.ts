@@ -9,6 +9,7 @@
 
 import { upsertLead } from './leads';
 import type { LeadSource } from './match';
+import type { OperatorDef } from './operators';
 
 /** TABC temporary/event permit types — flagged as `tabc_event` + event_upcoming. */
 export const EVENT_LICENSE_TYPES = new Set(['ET', 'NT', 'TR', 'NB', 'NE']);
@@ -40,7 +41,8 @@ export function isLeadWorthy(input: { licenseType?: string; classification?: str
 /** Upsert a TABC record into `leads` (no-op for renewals / missing address). */
 export async function upsertTabcLead(
   db: FirebaseFirestore.Firestore,
-  input: TabcLeadInput
+  input: TabcLeadInput,
+  operators: OperatorDef[] = []
 ): Promise<void> {
   if (!input.address || !isLeadWorthy(input)) return;
 
@@ -73,6 +75,7 @@ export async function upsertTabcLead(
       phones: input.phone ? [input.phone] : [],
     },
     source,
-    contacts
+    contacts,
+    operators
   );
 }

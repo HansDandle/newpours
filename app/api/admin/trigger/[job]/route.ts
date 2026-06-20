@@ -15,6 +15,7 @@ const VALID_JOBS = [
   "building_permits",
   "property_data",
   "generate_summary",
+  "retag_operators",
 ];
 
 function toSocrataDate(date: Date): string {

@@ -15,6 +15,7 @@ import { runBuildingPermitsJob } from './enrichBuildingPermits';
 import { runPropertyDataJob } from './enrichPropertyData';
 import { runTabsJob } from './ingestTabs';
 import { upsertTabcLead } from './tabcLeads';
+import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
 
 if (!admin.apps.length) admin.initializeApp();
@@ -90,6 +91,7 @@ export const processAdminTrigger = onDocumentCreated(
       let notes: string | undefined;
 
       if (jobName === 'tabc_ingest') {
+        const operators = await loadOperators(db);
         const INGEST_LIMIT = 10000;
         // Push county filter into the API query to avoid fetching all 10K records
         const countyApiFilter = countyFilter
@@ -164,7 +166,7 @@ export const processAdminTrigger = onDocumentCreated(
             status: payload.status,
             effectiveDate: payload.effectiveDate,
             classification: payload.newEstablishmentClassification,
-          });
+          }, operators);
           processed++;
         }
 
@@ -291,7 +293,7 @@ export const processAdminTrigger = onDocumentCreated(
             status: estPayload.status,
             effectiveDate: estPayload.effectiveDate,
             classification: estPayload.newEstablishmentClassification,
-          });
+          }, operators);
           processed++;
         }
 
@@ -437,6 +439,44 @@ export const processAdminTrigger = onDocumentCreated(
         const result = await runGenerateSummary();
         processed = result.count;
         notes = `Summary snapshot written: ${result.count} establishments, ${result.sizeBytes} bytes gzipped`;
+      } else if (jobName === 'retag_operators') {
+        const operators = await loadOperators(db);
+        const leadsSnap = await db.collection('leads').get();
+        const counts: Record<string, number> = {};
+        let changed = 0;
+        let batch = db.batch();
+        let ops = 0;
+        for (const leadDoc of leadsSnap.docs) {
+          const d = leadDoc.data();
+          // Manual tags are sticky — count them but never override.
+          if (d.operatorLocked === true) {
+            if (d.operator?.name) counts[d.operator.name] = (counts[d.operator.name] ?? 0) + 1;
+            continue;
+          }
+          const op = resolveOperator(
+            { owner: d.ownerName, mailAddress: d.mailAddress, businessName: d.businessName },
+            operators
+          );
+          if (op) counts[op.name] = (counts[op.name] ?? 0) + 1;
+          if ((d.operator?.key ?? null) !== (op?.key ?? null)) {
+            batch.update(leadDoc.ref, { operator: op ?? null });
+            changed++;
+            if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+          }
+        }
+        if (ops > 0) await batch.commit();
+        // Refresh each operator's venue count.
+        let vb = db.batch();
+        let vops = 0;
+        for (const op of operators) {
+          if (!op.id) continue;
+          vb.set(db.collection('operators').doc(op.id), { venueCount: counts[op.name] ?? 0 }, { merge: true });
+          if (++vops >= 400) { await vb.commit(); vb = db.batch(); vops = 0; }
+        }
+        if (vops > 0) await vb.commit();
+        processed = changed;
+        notes = `Re-tag operators: changed=${changed}. ` +
+          Object.entries(counts).map(([n, c]) => `${n}:${c}`).join(', ');
       } else {
         finalStatus = 'partial';
         notes = `Admin trigger job '${jobName}' acknowledged but not implemented in processAdminTrigger yet.`;

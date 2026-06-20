@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import MultiSelect from "@/components/shared/MultiSelect";
 import LeadDetail, { SIGNAL_LABELS } from "@/components/leads/LeadDetail";
-import { matchOperatorQuery } from "@/lib/operators";
+import { matchOperatorQuery, loadOperators, type OperatorDef } from "@/lib/operators";
 import type { Lead, LeadSourceType, LeadSignal } from "@/types";
 
 const LEADS_CACHE_KEY = "newpours.leads.cache.v1";
@@ -62,6 +62,11 @@ export default function LeadsPage() {
   const [sortKey, setSortKey] = useState<"newest" | "opening" | "name" | "cost">("newest");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false); // detail drawer on small screens
+  const [operators, setOperators] = useState<OperatorDef[]>([]);
+
+  useEffect(() => {
+    loadOperators().then(setOperators).catch(() => {});
+  }, []);
 
   useEffect(() => {
     try {
@@ -94,7 +99,7 @@ export default function LeadsPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     // If the query names a known operator (e.g. "McGuire Moorman"), match its whole portfolio.
-    const queryOperator = matchOperatorQuery(search);
+    const queryOperator = matchOperatorQuery(search, operators);
     const out = rows.filter((r) => {
       if (counties.length && !counties.includes(r.county ?? "")) return false;
       if (sources.length && !(r.sources ?? []).some((s) => sources.includes(s.type))) return false;
@@ -126,7 +131,7 @@ export default function LeadsPage() {
       if (sortKey === "opening") return openingOf(a) - openingOf(b);
       return ts(b.firstSeenAt) - ts(a.firstSeenAt);
     });
-  }, [rows, search, counties, sources, signals, stage, sortKey]);
+  }, [rows, search, counties, sources, signals, stage, sortKey, operators]);
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
 

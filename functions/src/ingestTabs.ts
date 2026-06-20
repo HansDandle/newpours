@@ -15,6 +15,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { upsertLead, type SeedContact } from './leads';
 import type { LeadSource } from './match';
+import { loadOperators } from './operators';
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -231,6 +232,7 @@ export async function runTabsJob(options?: {
   projects = projects.slice(0, maxDetails);
 
   // 2. enrich + upsert
+  const operators = await loadOperators(db);
   let created = 0;
   let failed = 0;
   for (const p of projects) {
@@ -269,7 +271,8 @@ export async function runTabsJob(options?: {
           phones: [d.ownerPhone, d.tenantPhone].filter(Boolean) as string[],
         },
         source,
-        contacts
+        contacts,
+        operators
       );
       created++;
       await sleep(120);

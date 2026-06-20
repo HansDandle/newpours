@@ -12,7 +12,7 @@ import {
   unionStrings,
   type LeadSource,
 } from './match';
-import { resolveOperator } from './operators';
+import { resolveOperator, type OperatorDef } from './operators';
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -55,7 +55,8 @@ export async function upsertLead(
   db: FirebaseFirestore.Firestore,
   identity: LeadIdentity,
   source: LeadSource,
-  contacts: SeedContact[] = []
+  contacts: SeedContact[] = [],
+  operators: OperatorDef[] = []
 ): Promise<string> {
   const id = leadKey(identity.businessName, identity.address);
   const ref = db.collection('leads').doc(id);
@@ -71,14 +72,15 @@ export async function upsertLead(
 
   const website = firstNonEmpty(existing?.website, identity.website);
   const mailAddress = firstNonEmpty(existing?.mailAddress, identity.mailAddress);
-  // Resolve parent operator from this record; keep an already-resolved one if present.
+  // Resolve parent operator. A manually-locked lead keeps its operator untouched;
+  // otherwise match against the current operator registry (falling back to existing).
   const operator =
-    existing?.operator ??
-    resolveOperator({
-      owner: identity.ownerName,
-      mailAddress: identity.mailAddress,
-      businessName: identity.businessName,
-    });
+    existing?.operatorLocked === true
+      ? existing?.operator ?? null
+      : resolveOperator(
+          { owner: identity.ownerName, mailAddress, businessName: identity.businessName },
+          operators
+        ) ?? existing?.operator ?? null;
   const merged: Record<string, any> = {
     businessName: firstNonEmpty(existing?.businessName, identity.businessName) ?? identity.businessName,
     dba: firstNonEmpty(existing?.dba, identity.dba) ?? null,

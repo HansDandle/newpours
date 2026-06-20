@@ -50,6 +50,11 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
+    // Operator (hospitality group) registry — authed read (needed for search), admin write.
+    match /operators/{operatorId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
     match /alerts/{alertId} {
       allow get: if request.auth != null && resource.data.userId == request.auth.uid;
       allow list: if request.auth != null;

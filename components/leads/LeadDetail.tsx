@@ -9,7 +9,10 @@ import {
   logActivity,
   setFollowUp,
   addContact,
+  setOperator,
+  clearOperatorLock,
 } from "@/lib/crm";
+import { loadOperators, type OperatorDef } from "@/lib/operators";
 
 export const SIGNAL_LABELS: Record<string, string> = {
   opening_soon: "Opening soon",
@@ -60,6 +63,29 @@ export default function LeadDetail({
   const [busy, setBusy] = useState(false);
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState<LeadContact>({ role: "manual" });
+  const [operators, setOperators] = useState<OperatorDef[]>([]);
+
+  useEffect(() => {
+    if (isAdmin) loadOperators().then(setOperators).catch(() => {});
+  }, [isAdmin]);
+
+  const handleOperatorChange = async (value: string) => {
+    if (value === "__auto__") {
+      await clearOperatorLock(lead.id);
+      lead.operatorLocked = false;
+    } else if (value === "__none__") {
+      await setOperator(lead.id, null);
+      lead.operator = null;
+      lead.operatorLocked = true;
+    } else {
+      const op = operators.find((o) => o.id === value);
+      if (!op) return;
+      const ref = { key: op.id!, name: op.name };
+      await setOperator(lead.id, ref);
+      lead.operator = ref;
+      lead.operatorLocked = true;
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +202,21 @@ export default function LeadDetail({
               onChange={(e) => setFollowUp(lead.id, e.target.value || null)}
               className="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"
             />
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <label className="text-xs text-slate-500">Operator</label>
+            <select
+              value={lead.operatorLocked ? (lead.operator?.key ?? "__none__") : "__auto__"}
+              onChange={(e) => handleOperatorChange(e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1 text-sm text-slate-700"
+            >
+              <option value="__auto__">Auto{lead.operator && !lead.operatorLocked ? ` (${lead.operator.name})` : ""}</option>
+              <option value="__none__">None (locked)</option>
+              {operators.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+            </select>
+            {lead.operatorLocked && <span className="text-[10px] text-slate-400">pinned</span>}
           </div>
         </div>
       )}

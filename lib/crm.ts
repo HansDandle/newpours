@@ -79,6 +79,23 @@ export async function setFollowUp(leadId: string, followUpDate: string | null) {
   });
 }
 
+/** Manually pin a lead to an operator (or None). Locks it from the auto re-tag. */
+export async function setOperator(leadId: string, operator: { key: string; name: string } | null) {
+  await updateDoc(doc(db, "leads", leadId), {
+    operator,
+    operatorLocked: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/** Release the manual lock so the next re-tag decides the operator automatically. */
+export async function clearOperatorLock(leadId: string) {
+  await updateDoc(doc(db, "leads", leadId), {
+    operatorLocked: false,
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function addContact(leadId: string, contact: LeadContact) {
   await addDoc(collection(db, "leads", leadId, "contacts"), {
     name: contact.name ?? null,

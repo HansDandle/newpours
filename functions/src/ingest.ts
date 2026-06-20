@@ -1,6 +1,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
 import { upsertTabcLead } from './tabcLeads';
+import { loadOperators } from './operators';
 
 if (!admin.apps.length) admin.initializeApp();
 const adminDb = admin.firestore();
@@ -131,6 +132,7 @@ function classifyIssued(
 export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America/Chicago' }, async () => {
   const snapshot = await adminDb.collection('licenses').get();
   const existing = new Set(snapshot.docs.map(doc => doc.id));
+  const operators = await loadOperators(adminDb);
   let count = 0;
   let updatedCount = 0;
 
@@ -191,7 +193,7 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
       status: payload.status,
       effectiveDate: payload.effectiveDate,
       classification: classification.newEstablishmentClassification,
-    });
+    }, operators);
     if (isExisting) updatedCount++;
     else count++;
   }
@@ -285,7 +287,7 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
       status: payload.status,
       effectiveDate: payload.effectiveDate,
       classification: classification.newEstablishmentClassification,
-    });
+    }, operators);
     if (isExisting) updatedCount++;
     else count++;
   }

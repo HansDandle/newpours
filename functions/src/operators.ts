@@ -1,20 +1,19 @@
 /**
- * Operator (hospitality-group) registry. Many groups license each venue under a
- * separate LLC, so the parent operator never appears in the owner/trade name.
- * We link them by stable signals — primarily the shared HQ mailing address.
+ * Operator (hospitality-group) matching — data-driven. Operators live in the
+ * Firestore `operators` collection (managed via /admin/operators); these are the
+ * pure matchers + a loader. Keep in sync with lib/operators.ts (client copy).
  *
- * Keep in sync with lib/operators.ts (client copy — same logic, separate build).
+ * Groups license each venue under its own LLC, so the parent never appears on
+ * the record; we link them by shared signals (HQ mailing address, owner entity
+ * patterns) and let users search the group by name.
  */
 
 export interface OperatorDef {
-  key: string;
+  id?: string;
   name: string;
-  /** Names a user might search to find the group. */
-  aliases: string[];
-  /** Normalized substrings of the HQ mailing address (strongest signal). */
-  mailAddressContains?: string[];
-  /** Normalized substrings of the owner entity name. */
-  ownerContains?: string[];
+  aliases?: string[];
+  mailPatterns?: string[];
+  ownerPatterns?: string[];
 }
 
 export interface OperatorRef {
@@ -22,64 +21,41 @@ export interface OperatorRef {
   name: string;
 }
 
-export const OPERATORS: OperatorDef[] = [
-  {
-    key: 'mml-hospitality',
-    name: 'MML Hospitality',
-    aliases: ['mml hospitality', 'mcguire moorman', 'mcguire moorman lambert', 'mcguire moorman lambert hospitality'],
-    mailAddressContains: ['1711 s congress'],
-    ownerContains: ['word of mouth mml', 'mml 2021'],
-  },
-  {
-    key: 'elm-restaurant-group',
-    name: 'ELM Restaurant Group',
-    aliases: ['elm restaurant group', 'elm hospitality'],
-    mailAddressContains: ['511 w 7th'],
-  },
-  {
-    // 407 E 6th St — shared 6th-Street bar-management office. Managed by Twin Bar
-    // Management historically; now MoonlightATX. Either name should find the group.
-    key: 'moonlight-atx',
-    name: 'MoonlightATX',
-    aliases: ['moonlightatx', 'moonlight atx', 'twin bar management', 'twin bar', 'dirty 6th'],
-    mailAddressContains: ['407 e 6th'],
-  },
-  {
-    key: 'fbr-management',
-    name: 'FBR Management',
-    aliases: ['fbr management', 'fbr', '801 springdale'],
-    mailAddressContains: ['801 springdale'],
-  },
-];
-
 function norm(value?: string): string {
   return String(value ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 /** Resolve a record's parent operator from owner / mailing address / business name. */
-export function resolveOperator(rec: {
-  owner?: string;
-  mailAddress?: string;
-  businessName?: string;
-}): OperatorRef | null {
+export function resolveOperator(
+  rec: { owner?: string; mailAddress?: string; businessName?: string },
+  operators: OperatorDef[]
+): OperatorRef | null {
   const owner = norm(rec.owner);
   const mail = norm(rec.mailAddress);
   const name = norm(rec.businessName);
-  for (const op of OPERATORS) {
-    if (op.mailAddressContains?.some((m) => mail.includes(norm(m)))) return { key: op.key, name: op.name };
-    if (op.ownerContains?.some((o) => owner.includes(norm(o)))) return { key: op.key, name: op.name };
-    if (op.aliases.some((a) => owner.includes(norm(a)) || name.includes(norm(a)))) return { key: op.key, name: op.name };
+  for (const op of operators) {
+    const ref = { key: op.id ?? norm(op.name).replace(/ /g, '-'), name: op.name };
+    if ((op.mailPatterns ?? []).some((m) => m && mail.includes(norm(m)))) return ref;
+    if ((op.ownerPatterns ?? []).some((o) => o && owner.includes(norm(o)))) return ref;
+    if ((op.aliases ?? []).some((a) => a && (owner.includes(norm(a)) || name.includes(norm(a))))) return ref;
   }
   return null;
 }
 
-/** Resolve a free-text search query to an operator (so "mcguire moorman" finds the group). */
-export function matchOperatorQuery(query: string): OperatorRef | null {
+/** Resolve a free-text search query to an operator (so "hai" finds the group). */
+export function matchOperatorQuery(query: string, operators: OperatorDef[]): OperatorRef | null {
   const nq = norm(query);
   if (nq.length < 2) return null;
-  for (const op of OPERATORS) {
-    if (norm(op.name).includes(nq)) return { key: op.key, name: op.name };
-    if (op.aliases.some((a) => norm(a).includes(nq) || nq.includes(norm(a)))) return { key: op.key, name: op.name };
+  for (const op of operators) {
+    const ref = { key: op.id ?? norm(op.name).replace(/ /g, '-'), name: op.name };
+    if (norm(op.name).includes(nq)) return ref;
+    if ((op.aliases ?? []).some((a) => a && (norm(a).includes(nq) || nq.includes(norm(a))))) return ref;
   }
   return null;
+}
+
+/** Load all operators from Firestore (one read per ingest run). */
+export async function loadOperators(db: FirebaseFirestore.Firestore): Promise<OperatorDef[]> {
+  const snap = await db.collection('operators').get();
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<OperatorDef, 'id'>) }));
 }

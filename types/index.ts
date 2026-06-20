@@ -165,6 +165,21 @@ export interface OperatorRef {
   name: string;
 }
 
+/** A hospitality group, managed in the `operators` collection via /admin/operators. */
+export interface Operator {
+  id?: string;
+  name: string;
+  aliases?: string[];
+  /** Normalized substrings of the group's HQ mailing address (auto-match). */
+  mailPatterns?: string[];
+  /** Normalized substrings of the owner entity name (auto-match). */
+  ownerPatterns?: string[];
+  notes?: string;
+  venueCount?: number;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 export interface Lead {
   id?: string;
   businessName: string;
@@ -172,6 +187,8 @@ export interface Lead {
   ownerName?: string;
   /** Parent hospitality group, when the record links to a known operator. */
   operator?: OperatorRef | null;
+  /** True when an admin manually set/cleared the operator — re-tag won't override. */
+  operatorLocked?: boolean;
   mailAddress?: string;
   address: string;
   city?: string;

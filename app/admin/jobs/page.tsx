@@ -14,6 +14,7 @@ const JOBS = [
   { key: "health_inspections", label: "Health Inspections" },
   { key: "building_permits", label: "Building Permits" },
   { key: "property_data", label: "TCAD Property Data" },
+  { key: "retag_operators", label: "Re-tag Operators" },
 ];
 
 function statusBadge(status: string) {

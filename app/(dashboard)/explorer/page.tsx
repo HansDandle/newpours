@@ -5,7 +5,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import { getLicenseTypeInfo } from "@/lib/tabc-license-types";
-import { resolveOperator, matchOperatorQuery, type OperatorRef } from "@/lib/operators";
+import { resolveOperator, matchOperatorQuery, loadOperators, type OperatorRef, type OperatorDef } from "@/lib/operators";
 
 const EXPLORER_STORAGE_KEY = "newpours.explorer.filters.v1";
 
@@ -239,11 +239,6 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
     businessName: raw.businessName ?? raw.tradeName ?? "Unnamed Venue",
     tradeName: raw.tradeName,
     ownerName: raw.ownerName,
-    operator: resolveOperator({
-      owner: raw.ownerName,
-      mailAddress: raw.mailAddress,
-      businessName: raw.businessName ?? raw.tradeName,
-    }),
     licenseNumber: raw.licenseNumber,
     licenseType: raw.licenseType,
     licenseTypeLabel: raw.licenseTypeLabel,
@@ -331,6 +326,7 @@ function ExplorerCard({ title, value, meta }: { title: string; value: string; me
 export default function ExplorerPage() {
   const { user, isAdmin } = useAuth();
   const [rows, setRows] = useState<ExplorerRow[]>([]);
+  const [operators, setOperators] = useState<OperatorDef[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [hydrated, setHydrated] = useState(false);
@@ -428,6 +424,22 @@ export default function ExplorerPage() {
     [rows]
   );
 
+  useEffect(() => {
+    loadOperators().then(setOperators).catch(() => {});
+  }, []);
+
+  // Establishments don't store an operator, so resolve it client-side from the registry.
+  const rowsWithOp = useMemo(
+    () =>
+      operators.length === 0
+        ? rows
+        : rows.map((r) => ({
+            ...r,
+            operator: resolveOperator({ owner: r.ownerName, mailAddress: r.mailAddress, businessName: r.businessName }, operators),
+          })),
+    [rows, operators]
+  );
+
   const filteredRows = useMemo(() => {
     const revenueMin = Number(filters.revenueMin || 0);
     const revenueMax = Number(filters.revenueMax || 0);
@@ -435,9 +447,9 @@ export default function ExplorerPage() {
     const healthMin = Number(filters.healthMin || 0);
     const query = normalizeName(filters.search);
     // "McGuire Moorman" / "MML" resolves to an operator so the whole portfolio matches.
-    const queryOperator = matchOperatorQuery(filters.search);
+    const queryOperator = matchOperatorQuery(filters.search, operators);
 
-    const filtered = rows.filter((row) => {
+    const filtered = rowsWithOp.filter((row) => {
       const latestRevenue = Number(row.comptroller?.latestMonthRevenue ?? 0);
       const rating = Number(row.googlePlaces?.rating ?? 0);
       const healthScore = Number(row.healthInspection?.latestScore ?? 0);
@@ -487,7 +499,7 @@ export default function ExplorerPage() {
     });
 
     return sorted;
-  }, [rows, filters]);
+  }, [rowsWithOp, filters, operators]);
 
   const selected = filteredRows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
 

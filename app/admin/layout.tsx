@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { href: "/admin/queues/unmatched", label: "Unmatched Records", icon: "⚠️" },
   { href: "/admin/queues/duplicates", label: "Duplicate Flags", icon: "🔁" },
   { href: "/admin/users", label: "Users & Billing", icon: "👥" },
+  { href: "/admin/operators", label: "Operator Groups", icon: "🏛" },
   { href: "/admin/jobs", label: "Job Monitor", icon: "⚙️" },
   { href: "/admin/integrations", label: "Integrations", icon: "🔌" },
   { href: "/admin/logs", label: "Logs", icon: "📋" },
