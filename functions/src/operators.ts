@@ -37,9 +37,11 @@ export const OPERATORS: OperatorDef[] = [
     mailAddressContains: ['511 w 7th'],
   },
   {
-    key: 'dirty-sixth-bars',
-    name: 'Dirty 6th Bar Group',
-    aliases: ['dirty 6th bar group', 'dirty sixth', 'dirty 6th'],
+    // 407 E 6th St — shared 6th-Street bar-management office. Managed by Twin Bar
+    // Management historically; now MoonlightATX. Either name should find the group.
+    key: 'moonlight-atx',
+    name: 'MoonlightATX',
+    aliases: ['moonlightatx', 'moonlight atx', 'twin bar management', 'twin bar', 'dirty 6th'],
     mailAddressContains: ['407 e 6th'],
   },
   {
