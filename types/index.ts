@@ -97,6 +97,112 @@ export interface Alert {
   channel: 'email' | 'webhook' | 'dashboard';
 }
 
+// ─── Unified Leads Model (radio sales) ────────────────────────────────────────
+// A `lead` is one physical business/location, merged across every source that
+// references it (TABC license, TABC temp/event permit, TDLR/TABS construction
+// permit, city event permit). Replaces `establishments` as the product spine.
+
+export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event';
+
+/**
+ * Advertising-oriented lead-quality signals (replaces the alcohol-vendor
+ * `VendorSignal` taxonomy for the new radio-sales purpose).
+ */
+export type LeadSignal =
+  | 'opening_soon'        // pending TABC, or TABS completion within 90 days
+  | 'brand_new'           // first-time TABC issuance / truly new establishment
+  | 'build_out'           // active TDLR/TABS construction permit
+  | 'event_upcoming'      // TABC temporary/event permit (ET/NT/TR/NB/NE)
+  | 'no_website'          // no website found — likely under-marketed
+  | 'multi_unit_operator' // owner tied to multiple locations
+  | 'high_value_buildout'; // TABS estimated cost over threshold
+
+export type CrmStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
+
+export interface LeadSource {
+  type: LeadSourceType;
+  sourceId: string;            // TABS project #, or lic-/app- license id
+  status?: string;
+  registeredDate?: string | null;
+  openingDate?: string | null; // completion (TABS) / effective (TABC) date
+  estimatedCost?: number | null;
+  licenseType?: string;
+  detailUrl?: string;
+  firstSeenAt?: any;
+  raw?: Record<string, any>;
+}
+
+export interface LeadContact {
+  id?: string;
+  name?: string;
+  role?: 'owner' | 'tenant' | 'rep' | 'google' | 'manual';
+  phone?: string;
+  email?: string;
+  source?: string;
+  createdAt?: any;
+}
+
+export interface LeadActivity {
+  id?: string;
+  type: 'call' | 'email' | 'note' | 'meeting' | 'stage_change';
+  body?: string;
+  fromStage?: CrmStage;
+  toStage?: CrmStage;
+  createdAt?: any;
+  createdBy?: string;
+}
+
+export interface LeadCrm {
+  stage: CrmStage;
+  assignedTo?: string | null;
+  followUpDate?: string | null;
+  lastActivityAt?: any;
+  lastContactedAt?: any;
+}
+
+export interface OperatorRef {
+  key: string;
+  name: string;
+}
+
+export interface Lead {
+  id?: string;
+  businessName: string;
+  dba?: string;
+  ownerName?: string;
+  /** Parent hospitality group, when the record links to a known operator. */
+  operator?: OperatorRef | null;
+  mailAddress?: string;
+  address: string;
+  city?: string;
+  county?: string;
+  zipCode?: string;
+  lat?: number;
+  lng?: number;
+  phones?: string[];
+  emails?: string[];
+  website?: string;
+  sources: LeadSource[];
+  signals: LeadSignal[];
+  enrichment?: Record<string, any>;
+  crm: LeadCrm;
+  firstSeenAt?: any;
+  updatedAt?: any;
+}
+
+/** Stored at settings/integrations — drives the outbound webhook fanout. */
+export interface IntegrationSettings {
+  webhookUrl?: string;
+  secret?: string;
+  events?: Array<'lead.created' | 'lead.stage_changed'>;
+  filters?: {
+    counties?: string[];
+    signals?: LeadSignal[];
+  };
+  enabled?: boolean;
+  updatedAt?: any;
+}
+
 export interface Export {
   userId: string;
   createdAt: any;

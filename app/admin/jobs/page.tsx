@@ -7,6 +7,7 @@ import { useAuth } from "@/components/shared/AuthProvider";
 
 const JOBS = [
   { key: "tabc_ingest", label: "TABC Ingest" },
+  { key: "tabs_ingest", label: "TABS Permits Ingest" },
   { key: "dedup_pending", label: "Clean Up Stale Pending" },
   { key: "comptroller_update", label: "Comptroller Update" },
   { key: "google_places_refresh", label: "Google Places Refresh" },
@@ -176,7 +177,7 @@ export default function AdminJobsPage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-4 md:p-8 max-w-6xl">
       {toast && (
         <div className="fixed bottom-6 right-6 bg-gray-700 text-white text-sm px-4 py-3 rounded-lg shadow-lg z-50">
           {toast}

@@ -5,6 +5,7 @@ import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import { getLicenseTypeInfo } from "@/lib/tabc-license-types";
+import { resolveOperator, matchOperatorQuery, type OperatorRef } from "@/lib/operators";
 
 const EXPLORER_STORAGE_KEY = "newpours.explorer.filters.v1";
 
@@ -17,6 +18,7 @@ type ExplorerRow = {
   businessName: string;
   tradeName?: string;
   ownerName?: string;
+  operator?: OperatorRef | null;
   licenseNumber?: string;
   licenseType?: string;
   licenseTypeLabel?: string;
@@ -237,6 +239,11 @@ function normalizeRow(id: string, raw: RawRecord): ExplorerRow {
     businessName: raw.businessName ?? raw.tradeName ?? "Unnamed Venue",
     tradeName: raw.tradeName,
     ownerName: raw.ownerName,
+    operator: resolveOperator({
+      owner: raw.ownerName,
+      mailAddress: raw.mailAddress,
+      businessName: raw.businessName ?? raw.tradeName,
+    }),
     licenseNumber: raw.licenseNumber,
     licenseType: raw.licenseType,
     licenseTypeLabel: raw.licenseTypeLabel,
@@ -427,6 +434,8 @@ export default function ExplorerPage() {
     const ratingMin = Number(filters.ratingMin || 0);
     const healthMin = Number(filters.healthMin || 0);
     const query = normalizeName(filters.search);
+    // "McGuire Moorman" / "MML" resolves to an operator so the whole portfolio matches.
+    const queryOperator = matchOperatorQuery(filters.search);
 
     const filtered = rows.filter((row) => {
       const latestRevenue = Number(row.comptroller?.latestMonthRevenue ?? 0);
@@ -455,13 +464,15 @@ export default function ExplorerPage() {
           row.businessName,
           row.tradeName,
           row.ownerName,
+          row.operator?.name,
           row.address,
           row.city,
           row.county,
           row.zipCode,
           row.licenseNumber,
         ].filter(Boolean).join(" "));
-        if (!haystack.includes(query)) return false;
+        const operatorMatch = queryOperator ? row.operator?.key === queryOperator.key : false;
+        if (!haystack.includes(query) && !operatorMatch) return false;
       }
 
       return true;
@@ -497,7 +508,7 @@ export default function ExplorerPage() {
       return;
     }
     if (preset === "pendingRenewals") {
-      setFilters((prev) => ({ ...prev, classification: "RENEWAL", status: "Pending – In Review", sortKey: "latestRevenue", sortDir: "desc" }));
+      setFilters((prev) => ({ ...prev, classification: ["RENEWAL"], status: "Pending – In Review", sortKey: "latestRevenue", sortDir: "desc" }));
       return;
     }
     if (preset === "underRadar") {
@@ -821,6 +832,15 @@ export default function ExplorerPage() {
                               {hasPermits ? <StatusPill label="Permit signal" tone="hot" /> : null}
                             </div>
                             <p className="text-xs text-slate-500">{row.ownerName || "No owner"}</p>
+                            {row.operator ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setFilters((prev) => ({ ...prev, search: row.operator!.name })); }}
+                                className="self-start rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                                title="Show all properties from this operator"
+                              >
+                                🏛 {row.operator.name}
+                              </button>
+                            ) : null}
                             <p className="text-xs text-slate-400">{row.licenseType || "--"}{row.licenseNumber ? ` · ${row.licenseNumber}` : ""}</p>
                           </div>
                         </td>

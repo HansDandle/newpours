@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/admin/queues/duplicates", label: "Duplicate Flags", icon: "🔁" },
   { href: "/admin/users", label: "Users & Billing", icon: "👥" },
   { href: "/admin/jobs", label: "Job Monitor", icon: "⚙️" },
+  { href: "/admin/integrations", label: "Integrations", icon: "🔌" },
   { href: "/admin/logs", label: "Logs", icon: "📋" },
 ];
 
@@ -15,8 +16,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <AdminGuard>
       <div className="flex min-h-screen bg-gray-950 text-gray-100">
-        {/* Sidebar */}
-        <aside className="w-52 shrink-0 bg-gray-900 border-r border-gray-800 flex flex-col py-6">
+        {/* Desktop sidebar */}
+        <aside className="w-52 shrink-0 bg-gray-900 border-r border-gray-800 hidden md:flex flex-col py-6">
           <div className="px-4 mb-6">
             <span className="text-xs font-bold uppercase tracking-widest text-gray-500">
               Admin
@@ -37,8 +38,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
         </aside>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 overflow-auto">{children}</div>
+        {/* Content + mobile top nav */}
+        <div className="flex-1 min-w-0 overflow-auto">
+          <nav className="md:hidden flex gap-2 overflow-x-auto bg-gray-900 border-b border-gray-800 px-3 py-2">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="whitespace-nowrap shrink-0 rounded px-3 py-1.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition"
+              >
+                <span className="mr-1">{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          {children}
+        </div>
       </div>
     </AdminGuard>
   );

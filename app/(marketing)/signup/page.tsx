@@ -5,6 +5,7 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Turnstile, { turnstileEnabled, verifyTurnstileToken } from "@/components/shared/Turnstile";
 
 const VERTICALS = [
   "Beer & Wine Distributor",
@@ -34,6 +35,7 @@ function SignupForm() {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -52,6 +54,16 @@ function SignupForm() {
     if (form.password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
+    }
+    if (turnstileEnabled) {
+      if (!captchaToken) {
+        setError("Please complete the verification challenge.");
+        return;
+      }
+      if (!(await verifyTurnstileToken(captchaToken))) {
+        setError("Verification failed — please try again.");
+        return;
+      }
     }
 
     setLoading(true);
@@ -262,6 +274,7 @@ function SignupForm() {
             </div>
           </div>
 
+          <Turnstile onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
           <button
             type="submit"
             disabled={loading}

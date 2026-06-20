@@ -8,6 +8,7 @@ import {
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Turnstile, { turnstileEnabled, verifyTurnstileToken } from "@/components/shared/Turnstile";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,10 +16,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (turnstileEnabled) {
+      if (!captchaToken) {
+        setError("Please complete the verification challenge.");
+        return;
+      }
+      if (!(await verifyTurnstileToken(captchaToken))) {
+        setError("Verification failed — please try again.");
+        return;
+      }
+    }
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -89,6 +101,7 @@ export default function LoginPage() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--brand-accent)] transition"
             />
           </div>
+          <Turnstile onVerify={setCaptchaToken} onExpire={() => setCaptchaToken(null)} />
           <button
             type="submit"
             disabled={loading}

@@ -59,6 +59,30 @@
       "fields": [
         {"fieldPath": "__name__", "order": "DESCENDING"}
       ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "crm.stage", "order": "ASCENDING"},
+        {"fieldPath": "updatedAt", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "signals", "arrayConfig": "CONTAINS"},
+        {"fieldPath": "firstSeenAt", "order": "DESCENDING"}
+      ]
     }
   ],
   "fieldOverrides": []

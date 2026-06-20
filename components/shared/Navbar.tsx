@@ -15,12 +15,12 @@ export default function Navbar() {
   };
 
   return (
-    <nav className="w-full py-4 px-8 flex justify-between items-center bg-brand text-on-dark shadow-md">
-      <Link href="/" className="flex items-center gap-4 text-xl font-bold tracking-tight accent hover:opacity-90 transition text-on-dark">
-        <img src="/branding/pourscout_sm_logo.png" alt="PourScout" className="h-10 md:h-12 lg:h-14 w-auto" />
-        <span className="text-brand">PourScout</span>
+    <nav className="w-full py-4 px-4 sm:px-8 flex justify-between items-center bg-brand text-on-dark shadow-md">
+      <Link href="/" className="flex items-center gap-2 sm:gap-4 text-xl font-bold tracking-tight accent hover:opacity-90 transition text-on-dark min-w-0">
+        <img src="/branding/pourscout_sm_logo.png" alt="PourScout" className="h-9 sm:h-12 lg:h-14 w-auto shrink-0" />
+        <span className="text-brand truncate">PourScout</span>
       </Link>
-      <div className="flex gap-8 text-sm font-medium items-center">
+      <div className="flex gap-4 sm:gap-8 text-sm font-medium items-center shrink-0">
         {!loading && (
           <>
             {user ? (

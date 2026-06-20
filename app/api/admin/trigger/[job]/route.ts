@@ -7,6 +7,7 @@ const TABC_PENDING_API = "https://data.texas.gov/resource/mxm5-tdpj.json";
 
 const VALID_JOBS = [
   "tabc_ingest",
+  "tabs_ingest",
   "dedup_pending",
   "comptroller_update",
   "google_places_refresh",
@@ -209,6 +210,59 @@ async function buildPreview(
             ...(revenueMonth || minRevenue != null ? [`Revenue filter applied${revenueMonth ? ` for month ${revenueMonth}` : ""}${minRevenue != null ? ` with minimum ${minRevenue}` : ""}.`] : []),
             ...(onlyMissingGoogle ? ["Only establishments without a complete Google match are included."] : []),
           ],
+    };
+  }
+
+  if (job === "tabs_ingest") {
+    const TABS_COUNTY_IDS: Record<string, number> = { travis: 2227, williamson: 2246, hays: 2105 };
+    const targetCounties = county
+      ? [county.toLowerCase()].filter((c) => TABS_COUNTY_IDS[c] != null)
+      : Object.keys(TABS_COUNTY_IDS);
+    const begin = new Date();
+    begin.setDate(begin.getDate() - lookbackMonths * 30);
+    const beginStr = `${begin.getMonth() + 1}/${begin.getDate()}/${begin.getFullYear()}`;
+    const now = new Date();
+    const endStr = `${now.getMonth() + 1}/${now.getDate()}/${now.getFullYear()}`;
+
+    let estimated = 0;
+    for (const c of targetCounties) {
+      try {
+        const res = await fetch("https://www.tdlr.texas.gov/TABS/Search/SearchProjects", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: new URLSearchParams({
+            draw: "1",
+            start: "0",
+            length: "1",
+            LocationCounty: String(TABS_COUNTY_IDS[c]),
+            RegistrationDateBegin: beginStr,
+            RegistrationDateEnd: endStr,
+          }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          estimated += Number(json?.recordsFiltered ?? 0);
+        }
+      } catch {
+        // non-fatal — partial estimate
+      }
+    }
+    const capped = Math.min(estimated, 600);
+    return {
+      preview: true,
+      job,
+      scope: { county: county || "Travis/Williamson/Hays", lookbackMonths },
+      estimatedRecords: estimated,
+      estimatedFirestoreReads: capped,
+      estimatedFirestoreWrites: capped,
+      estimatedExternalCalls: capped + targetCounties.length,
+      notes: [
+        `TABS registrations in window across ${targetCounties.length} county(ies).`,
+        "Ingest fetches one detail page per project and is capped at 600 per run.",
+      ],
     };
   }
 

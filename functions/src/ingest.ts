@@ -1,5 +1,6 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import * as admin from 'firebase-admin';
+import { upsertTabcLead } from './tabcLeads';
 
 if (!admin.apps.length) admin.initializeApp();
 const adminDb = admin.firestore();
@@ -160,6 +161,7 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
       tradeName: record.trade_name ?? '',
       phone: record.phone ?? '',
       winePercent: record.wine_percent ?? '',
+      mailAddress: record.mail_address ?? '',
       masterFileId: record.master_file_id ?? null,
       subordinateLicenseId: record.subordinate_license_id ?? null,
       primaryLicenseId: record.primary_license_id ?? null,
@@ -175,6 +177,21 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
           },
       { merge: true }
     );
+    await upsertTabcLead(adminDb, {
+      id,
+      businessName: payload.businessName,
+      ownerName: payload.ownerName,
+      address: payload.address,
+      mailAddress: payload.mailAddress,
+      city: payload.city,
+      county: payload.county,
+      zip: payload.zipCode,
+      phone: payload.phone,
+      licenseType: payload.licenseType,
+      status: payload.status,
+      effectiveDate: payload.effectiveDate,
+      classification: classification.newEstablishmentClassification,
+    });
     if (isExisting) updatedCount++;
     else count++;
   }
@@ -254,6 +271,21 @@ export const ingestTABC = onSchedule({ schedule: '0 6 * * *', timeZone: 'America
           },
       { merge: true }
     );
+    await upsertTabcLead(adminDb, {
+      id,
+      businessName: payload.businessName,
+      ownerName: payload.ownerName,
+      address: payload.address,
+      mailAddress: payload.mailAddress,
+      city: payload.city,
+      county: payload.county,
+      zip: payload.zipCode,
+      phone: payload.phone,
+      licenseType: payload.licenseType,
+      status: payload.status,
+      effectiveDate: payload.effectiveDate,
+      classification: classification.newEstablishmentClassification,
+    });
     if (isExisting) updatedCount++;
     else count++;
   }

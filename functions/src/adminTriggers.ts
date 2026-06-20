@@ -13,6 +13,8 @@ import { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from 
 import { googleMapsApiKeySecret, runGooglePlacesJob } from './enrich';
 import { runBuildingPermitsJob } from './enrichBuildingPermits';
 import { runPropertyDataJob } from './enrichPropertyData';
+import { runTabsJob } from './ingestTabs';
+import { upsertTabcLead } from './tabcLeads';
 import { runGenerateSummary } from './generateSummary';
 
 if (!admin.apps.length) admin.initializeApp();
@@ -148,6 +150,21 @@ export const processAdminTrigger = onDocumentCreated(
               : { ...payload, isNew: true, firstSeenAt: admin.firestore.FieldValue.serverTimestamp() },
             { merge: true }
           );
+          await upsertTabcLead(db, {
+            id,
+            businessName: payload.businessName,
+            ownerName: payload.ownerName,
+            address: payload.address,
+            mailAddress: payload.mailAddress,
+            city: payload.city,
+            county: payload.county,
+            zip: payload.zipCode,
+            phone: payload.phone,
+            licenseType: payload.licenseType,
+            status: payload.status,
+            effectiveDate: payload.effectiveDate,
+            classification: payload.newEstablishmentClassification,
+          });
           processed++;
         }
 
@@ -260,6 +277,21 @@ export const processAdminTrigger = onDocumentCreated(
                 },
             { merge: true }
           );
+          await upsertTabcLead(db, {
+            id,
+            businessName: estPayload.businessName,
+            ownerName: estPayload.ownerName,
+            address: estPayload.address,
+            mailAddress: estPayload.mailAddress,
+            city: estPayload.city,
+            county: estPayload.county,
+            zip: estPayload.zipCode,
+            phone: estPayload.phone,
+            licenseType: estPayload.licenseType,
+            status: estPayload.status,
+            effectiveDate: estPayload.effectiveDate,
+            classification: estPayload.newEstablishmentClassification,
+          });
           processed++;
         }
 
@@ -336,6 +368,13 @@ export const processAdminTrigger = onDocumentCreated(
         }
         processed = removed;
         notes = `Removed ${removed} stale pending applications out of ${pendingSnap.size} licenses + ${estPendingSnap.size} establishment docs scanned.`;
+      } else if (jobName === 'tabs_ingest') {
+        const result = await runTabsJob({
+          counties: countyFilter ? [countyFilter] : undefined,
+          days: lookbackMonths * 30,
+        });
+        processed = result.created;
+        notes = `TABS permits ingest (${lookbackMonths}mo${countyFilter ? `, county=${countyFilter}` : ''}): created=${result.created}, processed=${result.processed}, failed=${result.failed}, counties=${result.counties.join('/')}`;
       } else if (jobName === 'health_inspections') {
         const result = await runHealthInspectionsJob(500, {
           county: countyFilter || undefined,

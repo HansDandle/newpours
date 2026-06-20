@@ -1,10 +1,12 @@
 export { ingestTABC } from './ingest';
+export { ingestTABS } from './ingestTabs';
 export { enrichLicense, enrichNewEstablishment, enrichGooglePlacesForEstablishment, runGooglePlacesJob } from './enrich';
 export { enrichComptrollerRevenue } from './enrichComptroller';
 export { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';
 export { enrichBuildingPermitsForEstablishment, runBuildingPermitsJob } from './enrichBuildingPermits';
 export { processAdminTrigger } from './adminTriggers';
 export { alertFanout } from './alertFanout';
+export { leadWebhookFanout } from './leadWebhook';
 export { sendDailyDigest } from './emailDigest';
 export { stripeWebhook } from './stripeWebhook';
 export { generateDailySummary } from './generateSummary';
