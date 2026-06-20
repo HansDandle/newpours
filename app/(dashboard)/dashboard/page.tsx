@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
+import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { EstablishmentClassification, License, PlanStatus, UserPlan } from "@/types";
 import { getLicenseTypeInfo, TABC_LICENSE_TYPES } from "@/lib/tabc-license-types";
 
@@ -335,6 +336,7 @@ function setCachedEstablishments(data: Record<string, any>[]) {
 
 export default function DashboardPage() {
   const { user, userPlan, userPlanStatus, isAdmin } = useAuth();
+  const fullAccess = isAdmin || ((userPlan === "pro" || userPlan === "enterprise") && userPlanStatus === "active");
   const [licenses, setLicenses] = useState<License[]>([]);
   const [enrichmentByLicense, setEnrichmentByLicense] = useState<Map<string, EstablishmentEnrichment>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -363,6 +365,12 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!user || !filtersHydrated) {
+      setLoading(false);
+      return;
+    }
+    if (!fullAccess) {
+      // Free trial doesn't include the Alert Feed (licenses) — skip the query.
+      setLicenses([]);
       setLoading(false);
       return;
     }
@@ -408,7 +416,7 @@ export default function DashboardPage() {
     };
     fetchLicenses();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, filtersHydrated, countiesKey]);
+  }, [user, filtersHydrated, countiesKey, fullAccess]);
 
   useEffect(() => {
     try {
@@ -562,6 +570,8 @@ export default function DashboardPage() {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  if (!fullAccess) return <UpgradeGate feature="Alert Feed" />;
 
   return (
     <section>

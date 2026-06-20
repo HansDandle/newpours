@@ -72,6 +72,14 @@
       "collectionGroup": "leads",
       "queryScope": "COLLECTION",
       "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "recordDate", "order": "DESCENDING"}
+      ]
+    },
+    {
+      "collectionGroup": "leads",
+      "queryScope": "COLLECTION",
+      "fields": [
         {"fieldPath": "crm.stage", "order": "ASCENDING"},
         {"fieldPath": "updatedAt", "order": "DESCENDING"}
       ]

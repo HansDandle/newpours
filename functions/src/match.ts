@@ -155,3 +155,20 @@ export function computeSignals(lead: {
   if (!lead.website) signals.add('no_website');
   return Array.from(signals);
 }
+
+/**
+ * The lead's "record date" — most recent filing/registration across its sources
+ * (TABS registration date, TABC issue/application date). Used for the free-tier
+ * recency gate. Ignores TABS completion (future) dates by preferring registeredDate.
+ */
+export function recordDateOf(sources: LeadSource[] | undefined): Date | null {
+  let max: Date | null = null;
+  for (const s of sources ?? []) {
+    const raw = s.registeredDate ?? s.openingDate;
+    if (!raw) continue;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) continue;
+    if (!max || d > max) max = d;
+  }
+  return max;
+}

@@ -203,6 +203,8 @@ export interface Lead {
   signals: LeadSignal[];
   enrichment?: Record<string, any>;
   crm: LeadCrm;
+  /** Most recent filing/registration date across sources (free-tier recency gate). */
+  recordDate?: any;
   firstSeenAt?: any;
   updatedAt?: any;
 }

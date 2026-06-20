@@ -10,6 +10,7 @@ import {
   mergeSources,
   computeSignals,
   unionStrings,
+  recordDateOf,
   type LeadSource,
 } from './match';
 import { resolveOperator, type OperatorDef } from './operators';
@@ -96,6 +97,10 @@ export async function upsertLead(
     website: website ?? null,
     sources,
     signals: computeSignals({ sources, website }),
+    recordDate: (() => {
+      const rd = recordDateOf(sources);
+      return rd ? admin.firestore.Timestamp.fromDate(rd) : (existing?.recordDate ?? null);
+    })(),
     crm: existing?.crm ?? { stage: 'new', assignedTo: null, followUpDate: null },
     firstSeenAt: existing?.firstSeenAt ?? admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),

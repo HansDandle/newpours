@@ -33,9 +33,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     match /leads/{id} {
-      // Paid/admin users can read leads; ingest writes via admin SDK,
-      // CRM edits (stage/assign/follow-up) require an admin-claimed user.
-      allow read: if canReadData();
+      // Paid/admin: full access. Free trial: Travis County + records 30+ days old
+      // only (the query must constrain county + recordDate, enforced here).
+      allow read: if canReadData()
+        || (request.auth != null
+            && resource.data.county == 'Travis'
+            && resource.data.recordDate is timestamp
+            && resource.data.recordDate < request.time - duration.value(30, 'd'));
       allow write: if isAdmin();
       // CRM subcollections: authenticated users can read/manage contacts + activity.
       match /contacts/{contactId} {

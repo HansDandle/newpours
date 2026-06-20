@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import { getLicenseTypeInfo } from "@/lib/tabc-license-types";
 import { resolveOperator, matchOperatorQuery, loadOperators, type OperatorRef, type OperatorDef } from "@/lib/operators";
+import UpgradeGate from "@/components/shared/UpgradeGate";
 
 const EXPLORER_STORAGE_KEY = "newpours.explorer.filters.v1";
 
@@ -324,7 +325,8 @@ function ExplorerCard({ title, value, meta }: { title: string; value: string; me
 }
 
 export default function ExplorerPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, userPlan, userPlanStatus } = useAuth();
+  const fullAccess = isAdmin || ((userPlan === "pro" || userPlan === "enterprise") && userPlanStatus === "active");
   const [rows, setRows] = useState<ExplorerRow[]>([]);
   const [operators, setOperators] = useState<OperatorDef[]>([]);
   const [loading, setLoading] = useState(true);
@@ -372,6 +374,7 @@ export default function ExplorerPage() {
 
   // Load establishments via shared sessionStorage cache (5-min TTL) to avoid redundant full-collection reads
   useEffect(() => {
+    if (!fullAccess) { setLoading(false); return; }
     const EST_CACHE_KEY = "newpours.establishments.cache.v1";
     const EST_CACHE_TTL = 5 * 60 * 1000;
     try {
@@ -396,7 +399,7 @@ export default function ExplorerPage() {
         if (nextRows.length > 0) setSelectedId(nextRows[0].id);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [fullAccess]);
 
   const countyOptions = useMemo(
     () => Array.from(new Set(rows.map((r) => r.county).filter(Boolean) as string[])).sort().map((v) => ({ value: v, label: v })),
@@ -674,6 +677,8 @@ export default function ExplorerPage() {
       setEnrichingRevenue(false);
     }
   };
+
+  if (!fullAccess) return <UpgradeGate feature="Market Explorer" />;
 
   return (
     <section className="space-y-6">
