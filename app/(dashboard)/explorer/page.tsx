@@ -506,6 +506,11 @@ export default function ExplorerPage() {
 
   const selected = filteredRows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
 
+  const relatedBusinesses = useMemo(() => {
+    if (!selected) return [];
+    return findRelated(selected, rowsWithOp);
+  }, [selected, rowsWithOp]);
+
   const stats = useMemo(() => {
     const revenueRows = filteredRows.filter((row) => row.comptroller?.latestMonthRevenue != null);
     const totalRevenue = revenueRows.reduce((sum, row) => sum + Number(row.comptroller?.latestMonthRevenue ?? 0), 0);
@@ -950,6 +955,25 @@ export default function ExplorerPage() {
                   )}
                   <DetailRow label="First Seen" value={formatDate(selected.firstSeenAt || selected.applicationDate)} />
                 </div>
+
+                {relatedBusinesses.length > 0 && (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Related Businesses</p>
+                    <ul className="mt-3 space-y-2">
+                      {relatedBusinesses.map(({ row, reasons }) => (
+                        <li key={row.id}>
+                          <button
+                            onClick={() => setSelectedId(row.id)}
+                            className="w-full text-left group"
+                          >
+                            <p className="text-sm font-semibold text-slate-800 group-hover:text-[var(--brand-accent)] truncate">{row.businessName}</p>
+                            <p className="text-[11px] text-slate-500">{reasons.join(" · ")}</p>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-slate-500">No venues match the current filters.</p>
@@ -1030,6 +1054,40 @@ function getSortValue(row: ExplorerRow, key: SortKey) {
   if (key === "health") return Number(row.healthInspection?.latestScore ?? -1);
   if (key === "applicationDate") return getTimestamp(row.applicationDate || row.firstSeenAt);
   return normalizeName(row.businessName);
+}
+
+function findRelated(selected: ExplorerRow, allRows: ExplorerRow[]): Array<{ row: ExplorerRow; reasons: string[] }> {
+  const normalizedOwner = normalizeName(selected.ownerName);
+  const normalizedMail = normalizeName(selected.mailAddress);
+  const taxpayerNum = selected.comptroller?.taxpayerNumber;
+
+  return allRows
+    .filter((r) => r.id !== selected.id)
+    .flatMap((r) => {
+      const reasons: string[] = [];
+      let score = 0;
+
+      if (selected.operator?.key && r.operator?.key === selected.operator.key) {
+        reasons.push(`Operator: ${selected.operator.name}`);
+        score += 3;
+      }
+      if (taxpayerNum && r.comptroller?.taxpayerNumber === taxpayerNum) {
+        reasons.push("Same tax entity");
+        score += 3;
+      }
+      if (normalizedMail && normalizeName(r.mailAddress) === normalizedMail) {
+        reasons.push("Same mailing address");
+        score += 2;
+      }
+      if (normalizedOwner && normalizeName(r.ownerName) === normalizedOwner) {
+        reasons.push("Same owner");
+        score += 2;
+      }
+
+      return score > 0 ? [{ row: r, reasons, score }] : [];
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 }
 
 function buildOpportunityTags(row: ExplorerRow): Array<{ label: string; tone: "neutral" | "good" | "warn" | "hot" }> {
