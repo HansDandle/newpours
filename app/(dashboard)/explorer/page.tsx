@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import { getLicenseTypeInfo } from "@/lib/tabc-license-types";
@@ -338,6 +338,8 @@ export default function ExplorerPage() {
   const [enrichingRevenue, setEnrichingRevenue] = useState(false);
   const [onlyMissingGoogle, setOnlyMissingGoogle] = useState(true);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
+  const [revenueCache, setRevenueCache] = useState<Record<string, RevenueMonth[]>>({});
+  const [revenueLoading, setRevenueLoading] = useState(false);
 
   useEffect(() => {
     try {
@@ -505,6 +507,21 @@ export default function ExplorerPage() {
   }, [rowsWithOp, filters, operators]);
 
   const selected = filteredRows.find((row) => row.id === selectedId) ?? filteredRows[0] ?? null;
+
+  useEffect(() => {
+    const id = selected?.id;
+    if (!id || !selected?.comptroller?.taxpayerNumber) return;
+    if (revenueCache[id] !== undefined) return;
+    setRevenueLoading(true);
+    getDocs(query(collection(db, "establishments", id, "revenue"), orderBy("month", "desc"), limit(24)))
+      .then((snap) => {
+        const records = snap.docs.map((d) => d.data() as RevenueMonth);
+        setRevenueCache((prev) => ({ ...prev, [id]: records }));
+      })
+      .catch(() => setRevenueCache((prev) => ({ ...prev, [id]: [] })))
+      .finally(() => setRevenueLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
 
   const relatedBusinesses = useMemo(() => {
     if (!selected) return [];
@@ -912,6 +929,30 @@ export default function ExplorerPage() {
                   <ExplorerCard title="Google Rating" value={selected.googlePlaces?.rating != null ? selected.googlePlaces.rating.toFixed(1) : "--"} meta={selected.googlePlaces?.reviewCount != null ? `${selected.googlePlaces.reviewCount} reviews` : "No Google match"} />
                 </div>
 
+                {selected.comptroller?.taxpayerNumber && (
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Revenue History</p>
+                      {selected.comptroller.revenueTrend && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          selected.comptroller.revenueTrend === "up" ? "bg-emerald-100 text-emerald-700" :
+                          selected.comptroller.revenueTrend === "down" ? "bg-rose-100 text-rose-700" :
+                          "bg-slate-100 text-slate-600"
+                        }`}>
+                          {selected.comptroller.revenueTrend === "up" ? "Trending up" : selected.comptroller.revenueTrend === "down" ? "Trending down" : "Flat"}
+                        </span>
+                      )}
+                    </div>
+                    {revenueLoading && !revenueCache[selected.id] ? (
+                      <p className="text-xs text-slate-400">Loading history...</p>
+                    ) : revenueCache[selected.id]?.length ? (
+                      <RevenueSparkline records={revenueCache[selected.id]} />
+                    ) : revenueCache[selected.id] !== undefined ? (
+                      <p className="text-xs text-slate-400">No monthly history available.</p>
+                    ) : null}
+                  </div>
+                )}
+
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Why it matters</p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -1054,6 +1095,43 @@ function getSortValue(row: ExplorerRow, key: SortKey) {
   if (key === "health") return Number(row.healthInspection?.latestScore ?? -1);
   if (key === "applicationDate") return getTimestamp(row.applicationDate || row.firstSeenAt);
   return normalizeName(row.businessName);
+}
+
+type RevenueMonth = {
+  month: string;
+  totalReceipts: number;
+  liquorReceipts?: number;
+  beerReceipts?: number;
+  wineReceipts?: number;
+};
+
+function RevenueSparkline({ records }: { records: RevenueMonth[] }) {
+  const sorted = [...records].sort((a, b) => a.month.localeCompare(b.month));
+  const max = Math.max(...sorted.map((r) => r.totalReceipts), 1);
+  const BAR = 10, GAP = 2, H = 56, LABEL = 14;
+  const W = sorted.length * (BAR + GAP) - GAP;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H + LABEL}`} className="w-full overflow-visible" style={{ height: H + LABEL }}>
+      {sorted.map((r, i) => {
+        const h = Math.max(2, Math.round((r.totalReceipts / max) * H));
+        const x = i * (BAR + GAP);
+        const isLatest = i === sorted.length - 1;
+        const label = new Date(r.month + "-02").toLocaleDateString("en-US", { month: "short" });
+        const showLabel = i % 6 === 0 || isLatest;
+        return (
+          <g key={r.month}>
+            <title>{r.month} · {formatCompactCurrency(r.totalReceipts)}</title>
+            <rect x={x} y={H - h} width={BAR} height={h} rx={1.5}
+              fill={isLatest ? "var(--brand-accent)" : "#e2e8f0"} />
+            {showLabel && (
+              <text x={x + BAR / 2} y={H + LABEL} textAnchor="middle" fontSize={8} fill="#94a3b8">{label}</text>
+            )}
+          </g>
+        );
+      })}
+    </svg>
+  );
 }
 
 function findRelated(selected: ExplorerRow, allRows: ExplorerRow[]): Array<{ row: ExplorerRow; reasons: string[] }> {
