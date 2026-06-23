@@ -21,6 +21,8 @@ export default function AdminIntegrationsPage() {
   const [testing, setTesting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<any[]>([]);
+  const [hsTesting, setHsTesting] = useState(false);
+  const [hsKeyVisible, setHsKeyVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -57,6 +59,30 @@ export default function AdminIntegrationsPage() {
       flash("Test request failed.");
     } finally {
       setTesting(false);
+    }
+  };
+
+  const setHs = (patch: Partial<NonNullable<IntegrationSettings["hubspot"]>>) =>
+    setSettings((s) => ({ ...s, hubspot: { ...s.hubspot, ...patch } }));
+
+  const testHubSpot = async () => {
+    const key = settings.hubspot?.serviceKey;
+    if (!key) return;
+    setHsTesting(true);
+    try {
+      const res = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      if (res.ok) {
+        flash("HubSpot connected — service key is valid ✓");
+      } else {
+        const body = await res.json().catch(() => ({}));
+        flash(`HubSpot error: ${body?.message ?? `HTTP ${res.status}`}`);
+      }
+    } catch {
+      flash("HubSpot test failed — network error.");
+    } finally {
+      setHsTesting(false);
     }
   };
 
@@ -130,6 +156,64 @@ export default function AdminIntegrationsPage() {
             <div className="flex gap-2 pt-2">
               <button onClick={save} disabled={saving} className="btn-accent px-4 py-2 text-sm rounded disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
               <button onClick={sendTest} disabled={testing || !settings.webhookUrl} className="px-4 py-2 text-sm rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50">{testing ? "Sending…" : "Send test event"}</button>
+            </div>
+          </div>
+
+          {/* HubSpot CRM */}
+          <h2 className="text-xs text-gray-500 uppercase tracking-widest mt-8 mb-3">HubSpot CRM</h2>
+          <p className="text-sm text-gray-400 mb-4">Push leads to HubSpot as associated Company + Contact + Deal records — on-demand from a lead, or automatically as new leads arrive.</p>
+          <div className="space-y-4 rounded-lg border border-gray-800 bg-gray-900 p-5">
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input type="checkbox" checked={!!settings.hubspot?.enabled} onChange={(e) => setHs({ enabled: e.target.checked })} />
+              Enable HubSpot integration
+            </label>
+
+            <label className="block text-xs text-gray-400">
+              Service key
+              <div className="mt-1 flex gap-2">
+                <input
+                  type={hsKeyVisible ? "text" : "password"}
+                  value={settings.hubspot?.serviceKey ?? ""}
+                  onChange={(e) => setHs({ serviceKey: e.target.value })}
+                  placeholder="pat-na1-…"
+                  className="flex-1 bg-gray-950 border border-gray-700 text-gray-200 rounded px-3 py-2 text-sm font-mono"
+                />
+                <button type="button" onClick={() => setHsKeyVisible((v) => !v)} className="px-3 py-2 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-300">{hsKeyVisible ? "Hide" : "Show"}</button>
+                <button type="button" onClick={testHubSpot} disabled={hsTesting || !settings.hubspot?.serviceKey} className="px-3 py-2 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50">{hsTesting ? "Testing…" : "Test"}</button>
+              </div>
+              <span className="mt-1 block text-[11px] text-gray-500">HubSpot → Settings → Integrations → Service Keys. Needs companies, contacts, and deals read/write scopes.</span>
+            </label>
+
+            <label className="block text-xs text-gray-400">
+              Pipeline ID <span className="text-gray-600">(optional — blank uses the default pipeline)</span>
+              <input
+                value={settings.hubspot?.pipelineId ?? ""}
+                onChange={(e) => setHs({ pipelineId: e.target.value })}
+                placeholder="default"
+                className="mt-1 w-full bg-gray-950 border border-gray-700 text-gray-200 rounded px-3 py-2 text-sm font-mono"
+              />
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input type="checkbox" checked={!!settings.hubspot?.autoSync} onChange={(e) => setHs({ autoSync: e.target.checked })} />
+              Auto-sync new leads as they arrive
+            </label>
+
+            <details className="text-xs text-gray-400">
+              <summary className="cursor-pointer text-gray-500 hover:text-gray-300">Default stage mapping</summary>
+              <div className="mt-2 font-mono text-[11px] text-gray-400 space-y-0.5">
+                <div>new → appointmentscheduled</div>
+                <div>contacted → qualifiedtobuy</div>
+                <div>qualified → presentationscheduled</div>
+                <div>proposal → decisionmakerboughtin</div>
+                <div>won → closedwon</div>
+                <div>lost → closedlost</div>
+              </div>
+              <p className="mt-2 text-[11px] text-gray-500">HubSpot's default Sales Pipeline stage IDs. If you use a custom pipeline, deal creation will fail with an invalid-stage error — tell me your stage IDs and I'll wire in a custom mapping.</p>
+            </details>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={save} disabled={saving} className="btn-accent px-4 py-2 text-sm rounded disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
             </div>
           </div>
 

@@ -220,6 +220,16 @@ export interface IntegrationSettings {
   };
   enabled?: boolean;
   updatedAt?: any;
+  hubspot?: {
+    serviceKey?: string;
+    enabled?: boolean;
+    /** Auto-push every new lead to HubSpot on creation. */
+    autoSync?: boolean;
+    /** HubSpot pipeline ID — leave blank to use the default pipeline. */
+    pipelineId?: string;
+    /** Override PourScout stage → HubSpot deal stage value mapping. */
+    stageMap?: Record<string, string>;
+  };
 }
 
 export interface Export {

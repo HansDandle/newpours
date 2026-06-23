@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "@/lib/firebase";
 import type { Lead, LeadActivity, LeadContact, CrmStage } from "@/types";
 import {
@@ -61,6 +62,8 @@ export default function LeadDetail({
   const [activities, setActivities] = useState<LeadActivity[]>([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hsPushing, setHsPushing] = useState(false);
+  const [hsPushResult, setHsPushResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState<LeadContact>({ role: "manual" });
   const [operators, setOperators] = useState<OperatorDef[]>([]);
@@ -145,6 +148,21 @@ export default function LeadDetail({
     }
   };
 
+  const handlePushToHubSpot = async () => {
+    setHsPushing(true);
+    setHsPushResult(null);
+    try {
+      const fn = httpsCallable(getFunctions(), "hubspotPushLead");
+      const res = await fn({ leadId: lead.id });
+      const data = res.data as { created?: boolean };
+      setHsPushResult({ ok: true, message: data.created ? "Created in HubSpot" : "Updated in HubSpot" });
+    } catch (err: any) {
+      setHsPushResult({ ok: false, message: err?.message ?? "Push failed" });
+    } finally {
+      setHsPushing(false);
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -217,6 +235,20 @@ export default function LeadDetail({
               ))}
             </select>
             {lead.operatorLocked && <span className="text-[10px] text-slate-400">pinned</span>}
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              onClick={handlePushToHubSpot}
+              disabled={hsPushing}
+              className="rounded-full border border-[#FF7A59] px-3 py-1 text-xs font-semibold text-[#FF7A59] hover:bg-[#FF7A59] hover:text-white transition disabled:opacity-40"
+            >
+              {hsPushing ? "Pushing…" : "Push to HubSpot"}
+            </button>
+            {hsPushResult && (
+              <span className={`text-xs font-medium ${hsPushResult.ok ? "text-green-600" : "text-red-500"}`}>
+                {hsPushResult.ok ? "✓" : "✗"} {hsPushResult.message}
+              </span>
+            )}
           </div>
         </div>
       )}

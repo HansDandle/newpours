@@ -10,3 +10,4 @@ export { leadWebhookFanout } from './leadWebhook';
 export { sendDailyDigest } from './emailDigest';
 export { stripeWebhook } from './stripeWebhook';
 export { generateDailySummary } from './generateSummary';
+export { hubspotPushLead } from './hubspot';
