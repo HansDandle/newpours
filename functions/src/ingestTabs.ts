@@ -84,7 +84,7 @@ async function searchCounty(countyId: number, beginStr: string, endStr: string):
         'User-Agent': 'newpours-tabs-ingest/1.0',
       },
       body,
-    }, 20000);
+    }, 30000);
     if (!res.ok) throw new Error(`SearchProjects HTTP ${res.status}`);
     const json = (await res.json()) as { recordsFiltered?: number; recordsTotal?: number; data?: TabsListRow[] };
     total = json.recordsFiltered ?? json.recordsTotal ?? 0;
@@ -158,8 +158,11 @@ interface TabsDetail {
 async function fetchDetail(projectNumber: string): Promise<TabsDetail | null> {
   const res = await fetchWithTimeout(DETAIL_URL(projectNumber), {
     headers: { 'User-Agent': 'newpours-tabs-ingest/1.0' },
-  }, 15000);
-  if (!res.ok) return null;
+  }, 30000);
+  if (!res.ok) {
+    console.warn(`TABS detail ${projectNumber} HTTP ${res.status}`);
+    return null;
+  }
   const html = await res.text();
 
   const proj = parseDL(section(html, 'project'));
