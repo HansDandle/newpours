@@ -31,6 +31,10 @@ service cloud.firestore {
       allow read: if canReadData();
       // Writes only via admin SDK or admin-claimed users
       allow write: if isAdmin();
+      match /revenue/{month} {
+        allow read: if canReadData();
+        allow write: if false;
+      }
     }
     match /leads/{id} {
       // Paid/admin: full access. Free trial: Travis County + records 30+ days old
