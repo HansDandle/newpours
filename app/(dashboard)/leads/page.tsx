@@ -181,6 +181,67 @@ export default function LeadsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const handleRadioWorkflowExport = () => {
+    const RW_HEADERS = [
+      "Company ID", "Account Name", "Account Manager", "Type", "EDI #",
+      "Website", "General Phone", "General Cell/Mobile", "General Fax", "General Email",
+      "Contact Name", "Position", "Spot Separation", "Competitive Code #1", "Competitive Code #2",
+      "Email Times (Name)", "Email Times (Email)",
+      "Physical Address", "Physical City", "Physical State", "Physical Zip/Postal Code",
+      "Postal Address", "Postal City", "Postal State", "Postal Zip/Postal Code",
+      "Contact - Full Name", "Contact - First Name", "Contact - Surname",
+      "Office Phone", "Mobile/Cell", "Other Phone", "Fax Number", "Email Address", "Position",
+    ];
+    const lines = filtered.map((r) => {
+      const phone = r.phones?.[0] ?? "";
+      const email = r.emails?.[0] ?? "";
+      const hasOwner = Boolean(r.ownerName);
+      return [
+        r.id,                        // Company ID
+        r.businessName,              // Account Name
+        "",                          // Account Manager
+        "",                          // Type
+        "",                          // EDI #
+        r.website ?? "",             // Website
+        phone,                       // General Phone
+        "",                          // General Cell/Mobile
+        "",                          // General Fax
+        email,                       // General Email
+        hasOwner ? r.ownerName : "", // Contact Name
+        hasOwner ? "Owner" : "",     // Position
+        "",                          // Spot Separation
+        "",                          // Competitive Code #1
+        "",                          // Competitive Code #2
+        "",                          // Email Times (Name)
+        "",                          // Email Times (Email)
+        r.address ?? "",             // Physical Address
+        r.city ?? "",                // Physical City
+        "TX",                        // Physical State
+        r.zipCode ?? "",             // Physical Zip/Postal Code
+        "",                          // Postal Address
+        "",                          // Postal City
+        "",                          // Postal State
+        "",                          // Postal Zip/Postal Code
+        "",                          // Contact - Full Name
+        "",                          // Contact - First Name
+        "",                          // Contact - Surname
+        "",                          // Office Phone
+        "",                          // Mobile/Cell
+        "",                          // Other Phone
+        "",                          // Fax Number
+        "",                          // Email Address (additional contact)
+        "",                          // Position (additional contact)
+      ].map(csvEscape).join(",");
+    });
+    const blob = new Blob([[RW_HEADERS.map(csvEscape).join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "leads-radio-workflow.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <section className="space-y-6">
       {!fullAccess && (
@@ -224,6 +285,7 @@ export default function LeadsPage() {
             ))}
           </select>
           <button onClick={handleExport} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export CSV</button>
+          <button onClick={handleRadioWorkflowExport} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]">Export for Radio Workflow</button>
           <button onClick={() => { setSearch(""); setCounties([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
           <span className="ml-auto text-sm text-slate-500">{filtered.length.toLocaleString()} of {rows.length.toLocaleString()} leads</span>
         </div>
