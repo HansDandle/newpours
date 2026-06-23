@@ -229,6 +229,8 @@ export interface IntegrationSettings {
     pipelineId?: string;
     /** Override PourScout stage → HubSpot deal stage value mapping. */
     stageMap?: Record<string, string>;
+    /** Lead signals that qualify a lead for auto-sync (operator-linked leads always qualify). */
+    icpSignals?: LeadSignal[];
   };
 }
 

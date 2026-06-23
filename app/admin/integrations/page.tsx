@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { doc, getDoc, setDoc, serverTimestamp, collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import type { IntegrationSettings } from "@/types";
@@ -70,17 +71,13 @@ export default function AdminIntegrationsPage() {
     if (!key) return;
     setHsTesting(true);
     try {
-      const res = await fetch("https://api.hubapi.com/crm/v3/objects/contacts?limit=1", {
-        headers: { Authorization: `Bearer ${key}` },
-      });
-      if (res.ok) {
-        flash("HubSpot connected — service key is valid ✓");
-      } else {
-        const body = await res.json().catch(() => ({}));
-        flash(`HubSpot error: ${body?.message ?? `HTTP ${res.status}`}`);
-      }
-    } catch {
-      flash("HubSpot test failed — network error.");
+      // HubSpot's API has no browser CORS — test runs server-side via callable.
+      const fn = httpsCallable(getFunctions(), "hubspotTestConnection");
+      const res = await fn({ serviceKey: key });
+      const data = res.data as { ok: boolean; message: string };
+      flash(data.ok ? `HubSpot connected — service key is valid ✓` : `HubSpot error: ${data.message}`);
+    } catch (e: any) {
+      flash(`HubSpot test failed: ${e?.message ?? "request error"}`);
     } finally {
       setHsTesting(false);
     }

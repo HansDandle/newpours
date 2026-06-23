@@ -11,6 +11,7 @@
  */
 
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Client as HubSpotClient } from '@hubspot/api-client';
 
@@ -41,6 +42,19 @@ interface HubSpotSettings {
   autoSync?: boolean;
   pipelineId?: string;
   stageMap?: Record<string, string>;
+  /** Lead signals that qualify a lead for auto-sync. Operator-linked leads always qualify. */
+  icpSignals?: string[];
+}
+
+// Default ICP for auto-sync: restaurant groups (operator-linked, handled separately)
+// plus multi-unit operators and high-value build-outs. One-off licenses are excluded.
+const DEFAULT_ICP_SIGNALS = ['multi_unit_operator', 'high_value_buildout'];
+
+/** True when a lead fits the radio-sales ICP — tied to a known operator, or carrying an ICP signal. */
+function isIcpLead(leadData: Record<string, any>, icpSignals: string[]): boolean {
+  if (leadData.operator?.key) return true;
+  const signals: string[] = leadData.signals ?? [];
+  return signals.some((s) => icpSignals.includes(s));
 }
 
 async function getHubSpotSettings(): Promise<HubSpotSettings | null> {
@@ -73,27 +87,51 @@ export async function pushLeadToHubSpot(
   const existing = leadData.enrichment?.hubspot ?? {};
 
   // ── Company ──────────────────────────────────────────────────────────────────
-  const companyProps: Record<string, string> = {
-    name: leadData.businessName ?? '',
-    phone: leadData.phones?.[0] ?? '',
-    address: leadData.address ?? '',
-    city: leadData.city ?? '',
-    state: 'TX',
-    zip: leadData.zipCode ?? '',
-    ...(leadData.website ? { website: leadData.website } : {}),
-    ...(settings.pipelineId ? {} : {}),
-  };
-
+  // For a lead tied to a known operator (restaurant group), the HubSpot Company
+  // is the OPERATOR — so every venue rolls up under one account. The operator's
+  // company id is cached on the operator doc, so multiple venues dedupe to the
+  // same company. Standalone leads use the venue itself, cached per-lead.
+  const operatorRef = leadData.operator as { key?: string; name?: string } | null | undefined;
   let companyId: string;
   let created = false;
 
-  if (existing.companyId) {
-    await hs.crm.companies.basicApi.update(existing.companyId, { properties: companyProps });
-    companyId = existing.companyId;
+  if (operatorRef?.key && operatorRef?.name) {
+    const opDocRef = db.doc(`operators/${operatorRef.key}`);
+    const opSnap = await opDocRef.get();
+    const cachedCompanyId = opSnap.exists ? (opSnap.data() as Record<string, any>)?.hubspotCompanyId : null;
+    // Keep group company props minimal — a venue's address/phone is not the group HQ.
+    const companyProps: Record<string, string> = {
+      name: operatorRef.name,
+      state: 'TX',
+      ...(leadData.city ? { city: leadData.city } : {}),
+    };
+    if (cachedCompanyId) {
+      await hs.crm.companies.basicApi.update(cachedCompanyId, { properties: companyProps });
+      companyId = cachedCompanyId;
+    } else {
+      const co = await hs.crm.companies.basicApi.create({ properties: companyProps });
+      companyId = co.id;
+      created = true;
+      if (opSnap.exists) await opDocRef.update({ hubspotCompanyId: companyId });
+    }
   } else {
-    const co = await hs.crm.companies.basicApi.create({ properties: companyProps });
-    companyId = co.id;
-    created = true;
+    const companyProps: Record<string, string> = {
+      name: leadData.businessName ?? '',
+      phone: leadData.phones?.[0] ?? '',
+      address: leadData.address ?? '',
+      city: leadData.city ?? '',
+      state: 'TX',
+      zip: leadData.zipCode ?? '',
+      ...(leadData.website ? { website: leadData.website } : {}),
+    };
+    if (existing.companyId) {
+      await hs.crm.companies.basicApi.update(existing.companyId, { properties: companyProps });
+      companyId = existing.companyId;
+    } else {
+      const co = await hs.crm.companies.basicApi.create({ properties: companyProps });
+      companyId = co.id;
+      created = true;
+    }
   }
 
   // ── Contact ───────────────────────────────────────────────────────────────────
@@ -188,5 +226,59 @@ export const hubspotPushLead = onCall({ cors: true }, async (request) => {
   } catch (err: any) {
     console.error('HubSpot push failed:', err?.message ?? err);
     throw new HttpsError('internal', err?.message ?? 'HubSpot push failed');
+  }
+});
+
+// ── Test Connection — server-side (HubSpot's API has no browser CORS) ─────────
+
+export const hubspotTestConnection = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+  const passed = (request.data as { serviceKey?: string })?.serviceKey;
+  // Fall back to the saved key so an admin can re-test without re-pasting.
+  const serviceKey = passed || (await getHubSpotSettings())?.serviceKey;
+  if (!serviceKey) throw new HttpsError('failed-precondition', 'No service key provided');
+
+  try {
+    const res = await fetch('https://api.hubapi.com/crm/v3/objects/contacts?limit=1', {
+      headers: { Authorization: `Bearer ${serviceKey}` },
+    });
+    if (res.ok) return { ok: true, message: 'Connected — service key is valid.' };
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    return { ok: false, message: body?.message ?? `HTTP ${res.status}` };
+  } catch (err: any) {
+    return { ok: false, message: err?.message ?? 'Connection failed' };
+  }
+});
+
+// ── Auto-sync — push ICP leads to HubSpot as they arrive / advance ────────────
+
+export const hubspotAutoSync = onDocumentWritten('leads/{leadId}', async (event) => {
+  const after = event.data?.after;
+  if (!after?.exists) return; // deletion
+  const afterData = after.data() as Record<string, any>;
+  const before = event.data?.before;
+  const beforeData = before?.exists ? (before.data() as Record<string, any>) : null;
+
+  const settings = await getHubSpotSettings();
+  if (!settings?.enabled || !settings?.autoSync || !settings?.serviceKey) return;
+
+  const icpSignals = settings.icpSignals?.length ? settings.icpSignals : DEFAULT_ICP_SIGNALS;
+  const created = !beforeData;
+  const stageChanged = !!beforeData && beforeData.crm?.stage !== afterData.crm?.stage;
+  const wasIcp = beforeData ? isIcpLead(beforeData, icpSignals) : false;
+  const isIcp = isIcpLead(afterData, icpSignals);
+  const newlyIcp = !wasIcp && isIcp;
+  const alreadyInHubSpot = !!afterData.enrichment?.hubspot?.dealId;
+
+  // Only react to meaningful changes — never to our own enrichment.hubspot write-back
+  // (that's an update with no stage change and no ICP transition, so it no-ops here).
+  if (!(created || stageChanged || newlyIcp)) return;
+  // In scope only if it fits the ICP, or it's already a HubSpot deal we should keep synced.
+  if (!isIcp && !alreadyInHubSpot) return;
+
+  try {
+    await pushLeadToHubSpot(event.params.leadId, afterData, settings);
+  } catch (err: any) {
+    console.error(`HubSpot auto-sync failed for ${event.params.leadId}:`, err?.message ?? err);
   }
 });
