@@ -16,6 +16,7 @@ import { runPropertyDataJob } from './enrichPropertyData';
 import { runTabsJob } from './ingestTabs';
 import { runMultifamilyJob } from './ingestMultifamily';
 import { runMultifamilyPmJob } from './enrichMultifamilyPm';
+import { runNonprofitsJob } from './ingestNonprofits';
 import { upsertTabcLead } from './tabcLeads';
 import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
@@ -391,6 +392,10 @@ export const processAdminTrigger = onDocumentCreated(
         const result = await runMultifamilyPmJob({ limit: 200 });
         processed = result.matched;
         notes = `Multifamily PM resolution: matched=${result.matched}, no_match=${result.noMatch}, processed=${result.processed}`;
+      } else if (jobName === 'nonprofit_ingest') {
+        const result = await runNonprofitsJob();
+        processed = result.created;
+        notes = `Nonprofit 990 ingest (>$1MM, coverage counties): created=${result.created}, matched=${result.matched}, scanned=${result.scanned}`;
       } else if (jobName === 'health_inspections') {
         const result = await runHealthInspectionsJob(500, {
           county: countyFilter || undefined,

@@ -10,6 +10,7 @@ const VALID_JOBS = [
   "tabs_ingest",
   "multifamily_ingest",
   "multifamily_pm",
+  "nonprofit_ingest",
   "dedup_pending",
   "comptroller_update",
   "google_places_refresh",
