@@ -65,7 +65,7 @@ export default function LeadsPage() {
   const [sources, setSources] = useState<string[]>([]);
   const [signals, setSignals] = useState<string[]>([]);
   const [stage, setStage] = useState<string>("");
-  const [sortKey, setSortKey] = useState<"newest" | "opening" | "name" | "cost">("newest");
+  const [sortKey, setSortKey] = useState<"newest" | "opening" | "name" | "cost" | "followup">("newest");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false); // detail drawer on small screens
   const [operators, setOperators] = useState<OperatorDef[]>([]);
@@ -131,18 +131,29 @@ export default function LeadsPage() {
       return true;
     });
 
-    const openingOf = (r: LeadRow) =>
-      Math.min(
-        ...(r.sources ?? []).map((s) => (s.openingDate ? ts(s.openingDate) : Infinity)),
-        Infinity
-      );
+    // Soonest *upcoming* opening across sources. Past dates are ignored so old
+    // events don't float to the top of "Opening soonest"; leads with no future
+    // opening sort to the bottom.
+    const now = Date.now();
+    const openingOf = (r: LeadRow) => {
+      const future = (r.sources ?? [])
+        .map((s) => (s.openingDate ? ts(s.openingDate) : NaN))
+        .filter((t) => Number.isFinite(t) && t >= now);
+      return future.length ? Math.min(...future) : Infinity;
+    };
     const costOf = (r: LeadRow) =>
       Math.max(0, ...(r.sources ?? []).map((s) => Number(s.estimatedCost ?? 0)));
+    // Soonest follow-up first; leads without a follow-up date sort to the bottom.
+    const followupOf = (r: LeadRow) => {
+      const f = r.crm?.followUpDate ? ts(r.crm.followUpDate) : NaN;
+      return Number.isFinite(f) ? f : Infinity;
+    };
 
     return [...out].sort((a, b) => {
       if (sortKey === "name") return a.businessName.localeCompare(b.businessName);
       if (sortKey === "cost") return costOf(b) - costOf(a);
       if (sortKey === "opening") return openingOf(a) - openingOf(b);
+      if (sortKey === "followup") return followupOf(a) - followupOf(b);
       return ts(b.firstSeenAt) - ts(a.firstSeenAt);
     });
   }, [rows, search, counties, sources, signals, stage, sortKey, operators]);
@@ -274,9 +285,10 @@ export default function LeadsPage() {
           <MultiSelect placeholder="All signals" options={SIGNAL_OPTIONS} selected={signals} onChange={setSignals} />
           <select value={sortKey} onChange={(e) => setSortKey(e.target.value as typeof sortKey)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
             <option value="newest">Sort: Newest</option>
-            <option value="opening">Sort: Opening soonest</option>
-            <option value="cost">Sort: Build-out value</option>
-            <option value="name">Sort: Name</option>
+            <option value="opening">Sort: Opening soonest (upcoming)</option>
+            <option value="followup">Sort: Follow-up soonest</option>
+            <option value="cost">Sort: Value ($)</option>
+            <option value="name">Sort: Name (A–Z)</option>
           </select>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
