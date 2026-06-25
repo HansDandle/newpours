@@ -14,6 +14,7 @@ const LEADS_CACHE_TTL = 5 * 60 * 1000;
 
 const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "tabs_permit", label: "Construction permit (TABS)" },
+  { value: "building_permit", label: "Apartments (building permit)" },
   { value: "tabc", label: "TABC license" },
   { value: "tabc_event", label: "TABC event permit" },
   { value: "event", label: "Event permit" },

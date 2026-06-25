@@ -8,6 +8,7 @@ import { useAuth } from "@/components/shared/AuthProvider";
 const JOBS = [
   { key: "tabc_ingest", label: "TABC Ingest" },
   { key: "tabs_ingest", label: "TABS Permits Ingest" },
+  { key: "multifamily_ingest", label: "Multifamily Permits Ingest" },
   { key: "dedup_pending", label: "Clean Up Stale Pending" },
   { key: "comptroller_update", label: "Comptroller Update" },
   { key: "google_places_refresh", label: "Google Places Refresh" },

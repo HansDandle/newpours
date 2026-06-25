@@ -14,6 +14,7 @@ import { googleMapsApiKeySecret, runGooglePlacesJob } from './enrich';
 import { runBuildingPermitsJob } from './enrichBuildingPermits';
 import { runPropertyDataJob } from './enrichPropertyData';
 import { runTabsJob } from './ingestTabs';
+import { runMultifamilyJob } from './ingestMultifamily';
 import { upsertTabcLead } from './tabcLeads';
 import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
@@ -377,6 +378,14 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.created;
         notes = `TABS permits ingest (${lookbackMonths}mo${countyFilter ? `, county=${countyFilter}` : ''}): created=${result.created}, processed=${result.processed}, failed=${result.failed}, counties=${result.counties.join('/')}`;
+      } else if (jobName === 'multifamily_ingest') {
+        const minUnitsRaw = Number(data.minUnits);
+        const result = await runMultifamilyJob({
+          days: lookbackMonths * 30,
+          minUnits: Number.isFinite(minUnitsRaw) ? minUnitsRaw : undefined,
+        });
+        processed = result.created;
+        notes = `Multifamily permits ingest (${lookbackMonths}mo, Austin): created=${result.created}, projects=${result.processed}, skipped<units=${result.skipped}, permits=${result.permits}`;
       } else if (jobName === 'health_inspections') {
         const result = await runHealthInspectionsJob(500, {
           county: countyFilter || undefined,

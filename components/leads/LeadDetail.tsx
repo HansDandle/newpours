@@ -23,6 +23,7 @@ export const SIGNAL_LABELS: Record<string, string> = {
   no_website: "No website",
   multi_unit_operator: "Multi-unit operator",
   high_value_buildout: "High-value build-out",
+  multifamily: "New apartments",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -30,6 +31,7 @@ const SOURCE_LABELS: Record<string, string> = {
   tabc_event: "TABC event permit",
   tabs_permit: "Construction permit",
   event: "Event permit",
+  building_permit: "Apartment building permit",
 };
 
 function fmtDate(value: any) {

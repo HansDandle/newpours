@@ -9,7 +9,7 @@
 
 import * as crypto from 'crypto';
 
-export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event';
+export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit';
 export type LeadSignal =
   | 'opening_soon'
   | 'brand_new'
@@ -17,7 +17,8 @@ export type LeadSignal =
   | 'event_upcoming'
   | 'no_website'
   | 'multi_unit_operator'
-  | 'high_value_buildout';
+  | 'high_value_buildout'
+  | 'multifamily';
 
 export interface LeadSource {
   type: LeadSourceType;
@@ -149,6 +150,12 @@ export function computeSignals(lead: {
       signals.add('event_upcoming');
     } else if (s.type === 'event') {
       signals.add('event_upcoming');
+    } else if (s.type === 'building_permit') {
+      signals.add('multifamily');
+      const opening = s.openingDate ? new Date(s.openingDate).getTime() : NaN;
+      if (Number.isFinite(opening) && opening > now && opening - now <= NINETY_DAYS) {
+        signals.add('opening_soon');
+      }
     }
   }
 
