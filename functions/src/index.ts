@@ -1,6 +1,7 @@
 export { ingestTABC } from './ingest';
 export { ingestTABS } from './ingestTabs';
 export { ingestMultifamily } from './ingestMultifamily';
+export { enrichMultifamilyPm } from './enrichMultifamilyPm';
 export { enrichLicense, enrichNewEstablishment, enrichGooglePlacesForEstablishment, runGooglePlacesJob } from './enrich';
 export { enrichComptrollerRevenue } from './enrichComptroller';
 export { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';

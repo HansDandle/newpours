@@ -9,6 +9,7 @@ const VALID_JOBS = [
   "tabc_ingest",
   "tabs_ingest",
   "multifamily_ingest",
+  "multifamily_pm",
   "dedup_pending",
   "comptroller_update",
   "google_places_refresh",

@@ -15,6 +15,7 @@ import { runBuildingPermitsJob } from './enrichBuildingPermits';
 import { runPropertyDataJob } from './enrichPropertyData';
 import { runTabsJob } from './ingestTabs';
 import { runMultifamilyJob } from './ingestMultifamily';
+import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { upsertTabcLead } from './tabcLeads';
 import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
@@ -386,6 +387,10 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.created;
         notes = `Multifamily permits ingest (${lookbackMonths}mo, Austin): created=${result.created}, projects=${result.processed}, skipped<units=${result.skipped}, permits=${result.permits}`;
+      } else if (jobName === 'multifamily_pm') {
+        const result = await runMultifamilyPmJob({ limit: 200 });
+        processed = result.matched;
+        notes = `Multifamily PM resolution: matched=${result.matched}, no_match=${result.noMatch}, processed=${result.processed}`;
       } else if (jobName === 'health_inspections') {
         const result = await runHealthInspectionsJob(500, {
           county: countyFilter || undefined,
