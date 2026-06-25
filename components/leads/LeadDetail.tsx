@@ -95,6 +95,10 @@ export default function LeadDetail({
   };
 
   useEffect(() => {
+    // Reset per-lead UI state so a previous lead's push result doesn't linger
+    // when the shared detail panel switches to a different lead.
+    setHsPushResult(null);
+    setHsPushing(false);
     let cancelled = false;
     (async () => {
       const [cSnap, aSnap] = await Promise.all([
