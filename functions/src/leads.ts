@@ -14,6 +14,7 @@ import {
   type LeadSource,
 } from './match';
 import { resolveOperator, type OperatorDef } from './operators';
+import { computeCategory } from './categorize';
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -97,6 +98,10 @@ export async function upsertLead(
     website: website ?? null,
     sources,
     signals: computeSignals({ sources, website }),
+    category: computeCategory({
+      businessName: firstNonEmpty(existing?.businessName, identity.businessName) ?? identity.businessName,
+      sources,
+    }),
     recordDate: (() => {
       const rd = recordDateOf(sources);
       return rd ? admin.firestore.Timestamp.fromDate(rd) : (existing?.recordDate ?? null);

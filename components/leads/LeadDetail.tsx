@@ -196,6 +196,11 @@ export default function LeadDetail({
           </button>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {lead.category && (
+            <span className="inline-flex items-center rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+              {lead.category}
+            </span>
+          )}
           {(lead.signals ?? []).map((s) => (
             <Signal key={s} label={SIGNAL_LABELS[s] ?? s} />
           ))}

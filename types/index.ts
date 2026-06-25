@@ -203,6 +203,8 @@ export interface Lead {
   website?: string;
   sources: LeadSource[];
   signals: LeadSignal[];
+  /** Primary marketing category (Food & Drink, Medical, Nonprofit, …) for campaign segmentation. */
+  category?: string;
   enrichment?: Record<string, any>;
   crm: LeadCrm;
   /** Most recent filing/registration date across sources (free-tier recency gate). */

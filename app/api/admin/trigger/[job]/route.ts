@@ -11,6 +11,7 @@ const VALID_JOBS = [
   "multifamily_ingest",
   "multifamily_pm",
   "nonprofit_ingest",
+  "recategorize",
   "dedup_pending",
   "comptroller_update",
   "google_places_refresh",

@@ -64,6 +64,7 @@ export default function LeadsPage() {
   const [counties, setCounties] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [signals, setSignals] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [stage, setStage] = useState<string>("");
   const [sortKey, setSortKey] = useState<"newest" | "opening" | "name" | "cost" | "followup">("newest");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -110,12 +111,18 @@ export default function LeadsPage() {
     [rows]
   );
 
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.category).filter(Boolean) as string[])).sort().map((v) => ({ value: v, label: v })),
+    [rows]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     // If the query names a known operator (e.g. "McGuire Moorman"), match its whole portfolio.
     const queryOperator = matchOperatorQuery(search, operators);
     const out = rows.filter((r) => {
       if (counties.length && !counties.includes(r.county ?? "")) return false;
+      if (categories.length && !categories.includes(r.category ?? "")) return false;
       if (sources.length && !(r.sources ?? []).some((s) => sources.includes(s.type))) return false;
       if (signals.length && !(r.signals ?? []).some((s) => signals.includes(s))) return false;
       if (stage && (r.crm?.stage ?? "new") !== stage) return false;
@@ -156,7 +163,7 @@ export default function LeadsPage() {
       if (sortKey === "followup") return followupOf(a) - followupOf(b);
       return ts(b.firstSeenAt) - ts(a.firstSeenAt);
     });
-  }, [rows, search, counties, sources, signals, stage, sortKey, operators]);
+  }, [rows, search, counties, categories, sources, signals, stage, sortKey, operators]);
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
 
@@ -213,7 +220,7 @@ export default function LeadsPage() {
         r.id,                        // Company ID
         r.businessName,              // Account Name
         "",                          // Account Manager
-        "",                          // Type
+        r.category ?? "",            // Type
         "",                          // EDI #
         r.website ?? "",             // Website
         phone,                       // General Phone
@@ -278,9 +285,10 @@ export default function LeadsPage() {
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-6 md:grid-cols-3">
+        <div className="grid gap-3 xl:grid-cols-7 md:grid-cols-3">
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search business, owner, address, phone" className="xl:col-span-2 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-[var(--brand-accent)]" />
           <MultiSelect placeholder="All counties" options={countyOptions} selected={counties} onChange={setCounties} />
+          <MultiSelect placeholder="All categories" options={categoryOptions} selected={categories} onChange={setCategories} />
           <MultiSelect placeholder="All sources" options={SOURCE_OPTIONS} selected={sources} onChange={setSources} />
           <MultiSelect placeholder="All signals" options={SIGNAL_OPTIONS} selected={signals} onChange={setSignals} />
           <select value={sortKey} onChange={(e) => setSortKey(e.target.value as typeof sortKey)} className="rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-slate-800">
@@ -300,7 +308,7 @@ export default function LeadsPage() {
           </select>
           <button onClick={handleExport} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export CSV</button>
           <button onClick={handleRadioWorkflowExport} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]">Export for Radio Workflow</button>
-          <button onClick={() => { setSearch(""); setCounties([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
+          <button onClick={() => { setSearch(""); setCounties([]); setCategories([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
           <span className="ml-auto text-sm text-slate-500">{filtered.length.toLocaleString()} of {rows.length.toLocaleString()} leads</span>
         </div>
       </div>

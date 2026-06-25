@@ -17,6 +17,7 @@ import { runTabsJob } from './ingestTabs';
 import { runMultifamilyJob } from './ingestMultifamily';
 import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { runNonprofitsJob } from './ingestNonprofits';
+import { computeCategory } from './categorize';
 import { upsertTabcLead } from './tabcLeads';
 import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
@@ -496,6 +497,26 @@ export const processAdminTrigger = onDocumentCreated(
         processed = changed;
         notes = `Re-tag operators: changed=${changed}. ` +
           Object.entries(counts).map(([n, c]) => `${n}:${c}`).join(', ');
+      } else if (jobName === 'recategorize') {
+        const leadsSnap = await db.collection('leads').get();
+        const counts: Record<string, number> = {};
+        let changed = 0;
+        let batch = db.batch();
+        let ops = 0;
+        for (const leadDoc of leadsSnap.docs) {
+          const d = leadDoc.data();
+          const cat = computeCategory({ businessName: d.businessName, sources: d.sources });
+          counts[cat] = (counts[cat] ?? 0) + 1;
+          if (d.category !== cat) {
+            batch.update(leadDoc.ref, { category: cat });
+            changed++;
+            if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+          }
+        }
+        if (ops > 0) await batch.commit();
+        processed = changed;
+        notes = `Recategorize leads: changed=${changed}. ` +
+          Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n}:${c}`).join(', ');
       } else {
         finalStatus = 'partial';
         notes = `Admin trigger job '${jobName}' acknowledged but not implemented in processAdminTrigger yet.`;

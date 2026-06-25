@@ -70,6 +70,32 @@ export interface PushResult {
   created: boolean; // false = updated existing records
 }
 
+// Ensure the custom "pourscout_category" property exists on contacts + companies
+// (so leads can be segmented into email lists in HubSpot). Done once per instance.
+let categoryPropEnsured = false;
+async function ensureCategoryProperty(hs: HubSpotClient): Promise<void> {
+  if (categoryPropEnsured) return;
+  for (const objectType of ['contacts', 'companies']) {
+    try {
+      await hs.crm.properties.coreApi.getByName(objectType, 'pourscout_category');
+    } catch {
+      // 404 → create it. A plain string keeps it open-ended (no fixed option set).
+      try {
+        await hs.crm.properties.coreApi.create(objectType, {
+          name: 'pourscout_category',
+          label: 'PourScout Category',
+          type: 'string',
+          fieldType: 'text',
+          groupName: objectType === 'contacts' ? 'contactinformation' : 'companyinformation',
+        } as any);
+      } catch (e: any) {
+        console.warn(`ensureCategoryProperty(${objectType}):`, e?.message ?? e);
+      }
+    }
+  }
+  categoryPropEnsured = true;
+}
+
 /**
  * Core push: upsert Company + Contact + Deal in HubSpot for the given lead.
  * If the lead doc already has hubspot IDs (in enrichment.hubspot.*) those objects
@@ -85,6 +111,9 @@ export async function pushLeadToHubSpot(
   const hs = new HubSpotClient({ accessToken: settings.serviceKey });
   const stageMap = { ...DEFAULT_STAGE_MAP, ...(settings.stageMap ?? {}) };
   const existing = leadData.enrichment?.hubspot ?? {};
+  const category = String(leadData.category ?? '').trim();
+  await ensureCategoryProperty(hs);
+  const categoryProp: Record<string, string> = category ? { pourscout_category: category } : {};
 
   // ── Company ──────────────────────────────────────────────────────────────────
   // For a lead tied to a known operator (restaurant group), the HubSpot Company
@@ -104,6 +133,7 @@ export async function pushLeadToHubSpot(
       name: operatorRef.name,
       state: 'TX',
       ...(leadData.city ? { city: leadData.city } : {}),
+      ...categoryProp,
     };
     if (cachedCompanyId) {
       await hs.crm.companies.basicApi.update(cachedCompanyId, { properties: companyProps });
@@ -123,6 +153,7 @@ export async function pushLeadToHubSpot(
       state: 'TX',
       zip: leadData.zipCode ?? '',
       ...(leadData.website ? { website: leadData.website } : {}),
+      ...categoryProp,
     };
     if (existing.companyId) {
       await hs.crm.companies.basicApi.update(existing.companyId, { properties: companyProps });
@@ -145,6 +176,7 @@ export async function pushLeadToHubSpot(
       lastname,
       phone: leadData.phones?.[0] ?? '',
       email: leadData.emails?.[0] ?? '',
+      ...categoryProp,
     };
 
     if (contactId) {
