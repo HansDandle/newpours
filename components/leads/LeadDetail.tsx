@@ -68,6 +68,9 @@ export default function LeadDetail({
   const [busy, setBusy] = useState(false);
   const [hsPushing, setHsPushing] = useState(false);
   const [hsPushResult, setHsPushResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [syncedNow, setSyncedNow] = useState(false);
+  // True if the lead is in HubSpot — from the persisted deal id, or a push just now.
+  const inHubSpot = syncedNow || Boolean((lead.enrichment as any)?.hubspot?.dealId);
   const [showAddContact, setShowAddContact] = useState(false);
   const [newContact, setNewContact] = useState<LeadContact>({ role: "manual" });
   const [operators, setOperators] = useState<OperatorDef[]>([]);
@@ -99,6 +102,7 @@ export default function LeadDetail({
     // when the shared detail panel switches to a different lead.
     setHsPushResult(null);
     setHsPushing(false);
+    setSyncedNow(false);
     let cancelled = false;
     (async () => {
       const [cSnap, aSnap] = await Promise.all([
@@ -163,6 +167,7 @@ export default function LeadDetail({
       const fn = httpsCallable(getFunctions(), "hubspotPushLead");
       const res = await fn({ leadId: lead.id });
       const data = res.data as { created?: boolean };
+      setSyncedNow(true);
       setHsPushResult({ ok: true, message: data.created ? "Created in HubSpot" : "Updated in HubSpot" });
     } catch (err: any) {
       setHsPushResult({ ok: false, message: err?.message ?? "Push failed" });
@@ -190,10 +195,15 @@ export default function LeadDetail({
             <span className="text-indigo-400">· see portfolio</span>
           </button>
         )}
-        <div className="mt-2 flex flex-wrap gap-1.5">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {(lead.signals ?? []).map((s) => (
             <Signal key={s} label={SIGNAL_LABELS[s] ?? s} />
           ))}
+          {inHubSpot && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-[#FF7A59]/40 bg-[#FF7A59]/10 px-2 py-0.5 text-[11px] font-semibold text-[#FF7A59]">
+              ✓ In HubSpot
+            </span>
+          )}
         </div>
       </div>
 
@@ -250,7 +260,7 @@ export default function LeadDetail({
               disabled={hsPushing}
               className="rounded-full border border-[#FF7A59] px-3 py-1 text-xs font-semibold text-[#FF7A59] hover:bg-[#FF7A59] hover:text-white transition disabled:opacity-40"
             >
-              {hsPushing ? "Pushing…" : "Push to HubSpot"}
+              {hsPushing ? "Pushing…" : inHubSpot ? "Re-push to HubSpot" : "Push to HubSpot"}
             </button>
             {hsPushResult && (
               <span className={`text-xs font-medium ${hsPushResult.ok ? "text-green-600" : "text-red-500"}`}>
