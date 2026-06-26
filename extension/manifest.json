@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "PourScout × RadioWorkflow Lookup",
+  "version": "1.0.0",
+  "description": "Look up RadioWorkflow accounts (owner, contact, prospect status) from inside PourScout — using your own logged-in RadioWorkflow session.",
+  "host_permissions": ["*://www.radioworkflow.com/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://pourscout.com/*",
+        "https://www.pourscout.com/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": { "id": "pourscout-rw@rechargemedia.org", "strict_min_version": "115.0" }
+  }
+}

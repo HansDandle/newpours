@@ -14,6 +14,7 @@ import {
   clearOperatorLock,
 } from "@/lib/crm";
 import { loadOperators, type OperatorDef } from "@/lib/operators";
+import { lookupRadioWorkflow, type RwAccount } from "@/lib/radioworkflow";
 
 export const SIGNAL_LABELS: Record<string, string> = {
   opening_soon: "Opening soon",
@@ -177,6 +178,22 @@ export default function LeadDetail({
   const [apResult, setApResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [gpBusy, setGpBusy] = useState(false);
   const [gpResult, setGpResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [rwBusy, setRwBusy] = useState(false);
+  const [rwAccounts, setRwAccounts] = useState<RwAccount[] | null>(null);
+  const [rwError, setRwError] = useState<string | null>(null);
+
+  const handleRadioWorkflow = async () => {
+    setRwBusy(true);
+    setRwError(null);
+    setRwAccounts(null);
+    try {
+      const res = await lookupRadioWorkflow(lead.businessName);
+      if (res.ok) setRwAccounts(res.results ?? []);
+      else setRwError(res.error ?? "Lookup failed.");
+    } finally {
+      setRwBusy(false);
+    }
+  };
 
   const handleGooglePlaces = async () => {
     setGpBusy(true);
@@ -311,9 +328,48 @@ export default function LeadDetail({
                   {l.label} ↗
                 </a>
               ))}
+              <button
+                onClick={handleRadioWorkflow}
+                disabled={rwBusy}
+                className="inline-flex items-center rounded-full border border-emerald-400 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500 hover:text-white transition disabled:opacity-40"
+                title="Check whether this account is already in RadioWorkflow (needs the browser extension)"
+              >
+                {rwBusy ? "Checking…" : "RadioWorkflow"}
+              </button>
             </div>
           );
         })()}
+
+        {/* RadioWorkflow lookup result — is this account already in the station CRM? */}
+        {(rwError || rwAccounts) && (
+          <div className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50/60 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">RadioWorkflow</p>
+            {rwError ? (
+              <p className="mt-1 text-xs text-amber-700">{rwError}</p>
+            ) : (rwAccounts ?? []).length === 0 ? (
+              <p className="mt-1 text-xs text-slate-600">No matching account — not in RadioWorkflow yet.</p>
+            ) : (
+              <div className="mt-2 space-y-2">
+                {(rwAccounts ?? []).slice(0, 5).map((a) => (
+                  <div key={String(a.id)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-900">{a.name || "(unnamed)"}</span>
+                      {a.owner && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">owned by {a.owner}</span>}
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${a.prospect ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+                        {a.prospect ? "Prospect" : "Client"}
+                      </span>
+                      {a.archived && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Archived</span>}
+                    </div>
+                    {(a.contactName || a.position) && (
+                      <p className="mt-1 text-slate-600">{[a.contactName, a.position].filter(Boolean).join(" · ")}</p>
+                    )}
+                    <p className="mt-0.5 text-slate-500">{[a.email, a.phone].filter(Boolean).join(" · ") || "No contact on file"}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* CRM stage selector */}
