@@ -12,6 +12,7 @@ const JOBS = [
   { key: "multifamily_pm", label: "Multifamily PM Resolution" },
   { key: "nonprofit_ingest", label: "Nonprofit 990 Ingest" },
   { key: "recategorize", label: "Recategorize Leads" },
+  { key: "lead_places", label: "Lead Website/Phone (Google)" },
   { key: "apollo_enrich", label: "Apollo Contact Enrichment" },
   { key: "dedup_pending", label: "Clean Up Stale Pending" },
   { key: "comptroller_update", label: "Comptroller Update" },

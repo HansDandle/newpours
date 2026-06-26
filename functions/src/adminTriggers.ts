@@ -19,6 +19,7 @@ import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { runNonprofitsJob } from './ingestNonprofits';
 import { computeCategory } from './categorize';
 import { runApolloJob } from './enrichApollo';
+import { runLeadPlacesJob } from './enrichLeadPlaces';
 import { upsertTabcLead } from './tabcLeads';
 import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
@@ -498,6 +499,10 @@ export const processAdminTrigger = onDocumentCreated(
         processed = changed;
         notes = `Re-tag operators: changed=${changed}. ` +
           Object.entries(counts).map(([n, c]) => `${n}:${c}`).join(', ');
+      } else if (jobName === 'lead_places') {
+        const result = await runLeadPlacesJob({ limit: 200 });
+        processed = result.matched;
+        notes = `Lead Google Places: matched=${result.matched}, no_match=${result.noMatch}, processed=${result.processed}`;
       } else if (jobName === 'apollo_enrich') {
         const result = await runApolloJob({ limit: 100 });
         processed = result.withEmail;

@@ -105,6 +105,8 @@ export default function LeadDetail({
     setSyncedNow(false);
     setApResult(null);
     setApBusy(false);
+    setGpResult(null);
+    setGpBusy(false);
     let cancelled = false;
     (async () => {
       const [cSnap, aSnap] = await Promise.all([
@@ -164,6 +166,24 @@ export default function LeadDetail({
 
   const [apBusy, setApBusy] = useState(false);
   const [apResult, setApResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [gpBusy, setGpBusy] = useState(false);
+  const [gpResult, setGpResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleGooglePlaces = async () => {
+    setGpBusy(true);
+    setGpResult(null);
+    try {
+      const fn = httpsCallable(getFunctions(), "enrichLeadPlacesLead");
+      const res = await fn({ leadId: lead.id });
+      const d = res.data as { matched?: boolean; website?: string; phone?: string };
+      if (d.matched && (d.website || d.phone)) setGpResult({ ok: true, message: [d.phone, d.website].filter(Boolean).join("  ·  ") });
+      else setGpResult({ ok: false, message: "No Google match" });
+    } catch (err: any) {
+      setGpResult({ ok: false, message: err?.message ?? "Lookup failed" });
+    } finally {
+      setGpBusy(false);
+    }
+  };
 
   const handleApolloEnrich = async () => {
     setApBusy(true);
@@ -320,6 +340,20 @@ export default function LeadDetail({
             {hsPushResult && (
               <span className={`text-xs font-medium ${hsPushResult.ok ? "text-green-600" : "text-red-500"}`}>
                 {hsPushResult.ok ? "✓" : "✗"} {hsPushResult.message}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={handleGooglePlaces}
+              disabled={gpBusy}
+              className="rounded-full border border-sky-400 px-3 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-500 hover:text-white transition disabled:opacity-40"
+            >
+              {gpBusy ? "Searching…" : "Find website/phone (Google)"}
+            </button>
+            {gpResult && (
+              <span className={`text-xs font-medium ${gpResult.ok ? "text-green-600" : "text-red-500"}`}>
+                {gpResult.ok ? "✓" : "✗"} {gpResult.message}
               </span>
             )}
           </div>
