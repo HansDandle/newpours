@@ -18,6 +18,7 @@ const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "building_permit", label: "Apartments (building permit)" },
   { value: "nonprofit_990", label: "Nonprofit ($1MM+ 990)" },
   { value: "attorney", label: "Law firm (heavy advertiser)" },
+  { value: "bank_branch", label: "Bank / credit union (branches)" },
   { value: "tabc", label: "TABC license" },
   { value: "tabc_event", label: "TABC event permit" },
   { value: "event", label: "Event permit" },
@@ -66,6 +67,7 @@ export default function LeadsPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [stage, setStage] = useState<string>("");
   const [sortKey, setSortKey] = useState<"newest" | "opening" | "name" | "cost" | "followup">("newest");
+  const [campaign, setCampaign] = useState<"" | "underwriting" | "naming" | "football">("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false); // detail drawer on small screens
   const [operators, setOperators] = useState<OperatorDef[]>([]);
@@ -117,6 +119,8 @@ export default function LeadsPage() {
       if (sources.length && !(r.sources ?? []).some((s) => sources.includes(s.type))) return false;
       if (signals.length && !(r.signals ?? []).some((s) => signals.includes(s))) return false;
       if (stage && (r.crm?.stage ?? "new") !== stage) return false;
+      // Campaign view: only show leads that have any fit for the chosen sell.
+      if (campaign && (r.campaignFit?.[campaign] ?? 0) <= 0) return false;
       if (q) {
         const hay = [r.businessName, r.ownerName, r.operator?.name, r.address, r.city, r.county, ...(r.phones ?? [])]
           .filter(Boolean)
@@ -148,13 +152,15 @@ export default function LeadsPage() {
     };
 
     return [...out].sort((a, b) => {
+      // An active campaign view always sorts by that campaign's fit score, high→low.
+      if (campaign) return (b.campaignFit?.[campaign] ?? 0) - (a.campaignFit?.[campaign] ?? 0);
       if (sortKey === "name") return a.businessName.localeCompare(b.businessName);
       if (sortKey === "cost") return costOf(b) - costOf(a);
       if (sortKey === "opening") return openingOf(a) - openingOf(b);
       if (sortKey === "followup") return followupOf(a) - followupOf(b);
       return ts(b.firstSeenAt) - ts(a.firstSeenAt);
     });
-  }, [rows, search, counties, categories, sources, signals, stage, sortKey, operators]);
+  }, [rows, search, counties, categories, sources, signals, stage, sortKey, campaign, operators]);
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
 
@@ -261,8 +267,36 @@ export default function LeadsPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] accent">Leads</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">New businesses worth calling.</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Every new and soon-to-open business in your market — merged from TABC licenses, TDLR construction permits, and event permits, with owner and tenant contacts.
+          Every business worth calling in your market — new openings, build-outs, large nonprofits, law firms, and regional advertisers — merged across public records with owner and tenant contacts.
         </p>
+        {/* Campaign views — one lead pool, sorted by fit for each Sun Radio sell. */}
+        <div className="mt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Campaigns</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {([
+              ["underwriting", "Underwriting (16-mo)"],
+              ["naming", "Naming rights"],
+              ["football", "Football sponsor"],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setCampaign(campaign === key ? "" : key)}
+                className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                  campaign === key
+                    ? "btn-accent"
+                    : "border border-slate-300 bg-white text-slate-700 hover:border-[var(--brand-accent)]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+            {campaign && (
+              <button onClick={() => setCampaign("")} className="rounded-full px-3 py-2 text-sm font-medium text-slate-500 hover:text-slate-700">
+                ✕ Clear campaign
+              </button>
+            )}
+          </div>
+        </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <button onClick={() => applyPreset("opening_soon")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-[var(--brand-accent)]">Opening soon</button>
           <button onClick={() => applyPreset("build_out")} className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:border-[var(--brand-accent)]">New build-outs</button>
@@ -295,8 +329,11 @@ export default function LeadsPage() {
           </select>
           <button onClick={handleExport} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export CSV</button>
           <button onClick={handleRadioWorkflowExport} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]">Export for Radio Workflow</button>
-          <button onClick={() => { setSearch(""); setCounties([]); setCategories([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
-          <span className="ml-auto text-sm text-slate-500">{filtered.length.toLocaleString()} of {rows.length.toLocaleString()} leads</span>
+          <button onClick={() => { setSearch(""); setCounties([]); setCategories([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); setCampaign(""); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
+          <span className="ml-auto text-sm text-slate-500">
+            {campaign ? <span className="mr-1 font-semibold text-[var(--brand-accent)]">Ranked by fit ·</span> : null}
+            {filtered.length.toLocaleString()} of {rows.length.toLocaleString()} leads
+          </span>
         </div>
       </div>
 
@@ -327,7 +364,7 @@ export default function LeadsPage() {
                         <td className="px-4 py-3 align-top">
                           <p className="font-semibold text-slate-900">{r.businessName}</p>
                           <p className="text-xs text-slate-500">{r.ownerName || (r.phones?.[0] ?? "No contact")}</p>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <p className="text-xs text-slate-400">{(r.sources ?? []).map((s) => s.type).join(", ")}</p>
                             {r.operator && (
                               <button
@@ -337,6 +374,16 @@ export default function LeadsPage() {
                               >
                                 🏛 {r.operator.name}
                               </button>
+                            )}
+                            {(r.footprintCount ?? 0) > 0 && (
+                              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700" title="Broadcast cities covered">
+                                📍 {r.footprintCount} cities
+                              </span>
+                            )}
+                            {campaign && (
+                              <span className="rounded-full bg-[rgba(200,169,108,0.15)] px-2 py-0.5 text-[10px] font-bold text-[var(--brand-accent)]" title="Campaign fit score">
+                                fit {r.campaignFit?.[campaign] ?? 0}
+                              </span>
                             )}
                           </div>
                         </td>

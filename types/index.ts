@@ -102,7 +102,17 @@ export interface Alert {
 // references it (TABC license, TABC temp/event permit, TDLR/TABS construction
 // permit, city event permit). Replaces `establishments` as the product spine.
 
-export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney';
+export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney' | 'bank_branch';
+
+/**
+ * Per-campaign fit scores (0–100) for Sun Radio's three distinct sells. One lead,
+ * three scores — surfaced as filterable "campaign views" rather than separate lists.
+ */
+export interface CampaignFit {
+  underwriting: number; // ethos-fit 16-month underwriting (independent/local/established)
+  naming: number;       // naming-rights "whale" (wealth/budget proxy)
+  football: number;     // HS football sponsor (multi-town broadcast footprint)
+}
 
 /**
  * Advertising-oriented lead-quality signals (replaces the alcohol-vendor
@@ -206,6 +216,12 @@ export interface Lead {
   signals: LeadSignal[];
   /** Primary marketing category (Food & Drink, Medical, Nonprofit, …) for campaign segmentation. */
   category?: string;
+  /** Broadcast cities (of Sun Radio's HS-football footprint) this business operates in. */
+  footprintCities?: string[];
+  /** Count of broadcast cities covered — denormalized for sorting the football campaign. */
+  footprintCount?: number;
+  /** Per-campaign fit scores (0–100). See CampaignFit. */
+  campaignFit?: CampaignFit;
   enrichment?: Record<string, any>;
   crm: LeadCrm;
   /** Most recent filing/registration date across sources (free-tier recency gate). */

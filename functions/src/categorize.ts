@@ -16,6 +16,7 @@ export const LEAD_CATEGORIES = [
   'Housing',
   'Nonprofit',
   'Legal',
+  'Financial',
   'Other',
 ] as const;
 
@@ -61,6 +62,9 @@ export function computeCategory(input: CategorizeInput): LeadCategory {
 
   // Law firm discovered via Google Places.
   if (hasType('attorney')) return 'Legal';
+
+  // Bank / credit-union branch network.
+  if (hasType('bank_branch')) return 'Financial';
 
   // Keyword match across the name + permit descriptions + license type.
   const parts: string[] = [input.businessName ?? ''];

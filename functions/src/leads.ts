@@ -15,6 +15,7 @@ import {
 } from './match';
 import { resolveOperator, type OperatorDef } from './operators';
 import { computeCategory } from './categorize';
+import { computeCampaignFit } from './campaignFit';
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -30,6 +31,8 @@ export interface LeadIdentity {
   phones?: string[];
   emails?: string[];
   website?: string;
+  /** Broadcast cities this business covers (set by the bank-branch ingest). */
+  footprintCities?: string[];
 }
 
 export interface SeedContact {
@@ -110,6 +113,19 @@ export async function upsertLead(
     firstSeenAt: existing?.firstSeenAt ?? admin.firestore.FieldValue.serverTimestamp(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   };
+
+  // Broadcast footprint (union across runs) + per-campaign fit scores.
+  const footprintCities = unionStrings(existing?.footprintCities, identity.footprintCities);
+  merged.footprintCities = footprintCities;
+  merged.footprintCount = footprintCities.length;
+  merged.campaignFit = computeCampaignFit({
+    category: merged.category,
+    sources,
+    signals: merged.signals,
+    website,
+    footprintCount: footprintCities.length,
+    enrichment: existing?.enrichment,
+  });
 
   await ref.set(merged, { merge: true });
 

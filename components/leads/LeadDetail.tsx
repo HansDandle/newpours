@@ -36,7 +36,14 @@ const SOURCE_LABELS: Record<string, string> = {
   building_permit: "Apartment building permit",
   nonprofit_990: "Nonprofit (IRS 990)",
   attorney: "Law firm (Google Places)",
+  bank_branch: "Bank / credit union (FDIC)",
 };
+
+const CAMPAIGN_LABELS: { key: "underwriting" | "naming" | "football"; label: string }[] = [
+  { key: "underwriting", label: "Underwriting" },
+  { key: "naming", label: "Naming" },
+  { key: "football", label: "Football" },
+];
 
 function fmtDate(value: any) {
   if (!value) return "--";
@@ -254,6 +261,31 @@ export default function LeadDetail({
             </span>
           )}
         </div>
+
+        {/* Campaign fit — how well this lead suits each Sun Radio sell (0–100). */}
+        {lead.campaignFit && (
+          <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">Campaign fit</p>
+              {(lead.footprintCount ?? 0) > 0 && (
+                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700" title={(lead.footprintCities ?? []).join(", ")}>
+                  📍 {lead.footprintCount} broadcast cities
+                </span>
+              )}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {CAMPAIGN_LABELS.map(({ key, label }) => {
+                const score = lead.campaignFit?.[key] ?? 0;
+                return (
+                  <div key={key} className="rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-center">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+                    <p className={`text-lg font-bold ${score >= 60 ? "text-[var(--brand-accent)]" : score >= 30 ? "text-slate-700" : "text-slate-400"}`}>{score}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Quick research — open the lead's name + address in external tools. */}
         {(() => {

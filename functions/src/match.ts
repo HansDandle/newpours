@@ -9,7 +9,7 @@
 
 import * as crypto from 'crypto';
 
-export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney';
+export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney' | 'bank_branch';
 export type LeadSignal =
   | 'opening_soon'
   | 'brand_new'

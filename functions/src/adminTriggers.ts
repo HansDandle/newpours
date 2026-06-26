@@ -18,6 +18,8 @@ import { runMultifamilyJob } from './ingestMultifamily';
 import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { runNonprofitsJob } from './ingestNonprofits';
 import { runAttorneysJob } from './ingestAttorneys';
+import { runBanksJob } from './ingestBanks';
+import { computeCampaignFit } from './campaignFit';
 import { computeCategory } from './categorize';
 import { runApolloJob } from './enrichApollo';
 import { runLeadPlacesJob } from './enrichLeadPlaces';
@@ -408,6 +410,35 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.created;
         notes = `Attorney ingest (Google Places${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, heavyAdvertisers=${result.matched}, scanned=${result.scanned}, queries=${result.queries}`;
+      } else if (jobName === 'bank_ingest') {
+        const result = await runBanksJob();
+        processed = result.created;
+        notes = `Bank/branch ingest (FDIC, broadcast footprint): created=${result.created}, institutions=${result.institutions}, branchesInFootprint=${result.inFootprint}, txBranchesScanned=${result.branches}`;
+      } else if (jobName === 'recompute_fit') {
+        const leadsSnap = await db.collection('leads').get();
+        let changed = 0;
+        let batch = db.batch();
+        let ops = 0;
+        for (const leadDoc of leadsSnap.docs) {
+          const d = leadDoc.data();
+          const fit = computeCampaignFit({
+            category: d.category,
+            sources: d.sources,
+            signals: d.signals,
+            website: d.website,
+            footprintCount: d.footprintCount,
+            enrichment: d.enrichment,
+          });
+          const prev = d.campaignFit ?? {};
+          if (prev.underwriting !== fit.underwriting || prev.naming !== fit.naming || prev.football !== fit.football) {
+            batch.update(leadDoc.ref, { campaignFit: fit });
+            changed++;
+            if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+          }
+        }
+        if (ops > 0) await batch.commit();
+        processed = changed;
+        notes = `Recompute campaign fit: changed=${changed} of ${leadsSnap.size} leads.`;
       } else if (jobName === 'health_inspections') {
         const result = await runHealthInspectionsJob(500, {
           county: countyFilter || undefined,
