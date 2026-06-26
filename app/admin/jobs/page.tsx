@@ -11,6 +11,7 @@ const JOBS = [
   { key: "multifamily_ingest", label: "Multifamily Permits Ingest" },
   { key: "multifamily_pm", label: "Multifamily PM Resolution" },
   { key: "nonprofit_ingest", label: "Nonprofit 990 Ingest" },
+  { key: "attorney_ingest", label: "Attorney Ingest" },
   { key: "recategorize", label: "Recategorize Leads" },
   { key: "lead_places", label: "Lead Website/Phone (Google)" },
   { key: "apollo_enrich", label: "Apollo Contact Enrichment" },

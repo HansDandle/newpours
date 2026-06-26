@@ -15,6 +15,7 @@ export const LEAD_CATEGORIES = [
   'Retail & Services',
   'Housing',
   'Nonprofit',
+  'Legal',
   'Other',
 ] as const;
 
@@ -57,6 +58,9 @@ export function computeCategory(input: CategorizeInput): LeadCategory {
 
   // New apartment community.
   if (hasType('building_permit')) return 'Housing';
+
+  // Law firm discovered via Google Places.
+  if (hasType('attorney')) return 'Legal';
 
   // Keyword match across the name + permit descriptions + license type.
   const parts: string[] = [input.businessName ?? ''];

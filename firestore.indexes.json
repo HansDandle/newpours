@@ -11,6 +11,14 @@
       ]
     },
     {
+      "collectionGroup": "licenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {"fieldPath": "county", "order": "ASCENDING"},
+        {"fieldPath": "applicationDate", "order": "DESCENDING"}
+      ]
+    },
+    {
       "collectionGroup": "alerts",
       "queryScope": "COLLECTION",
       "fields": [

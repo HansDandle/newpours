@@ -22,8 +22,12 @@ service cloud.firestore {
       allow read: if isAdmin();
     }
     match /licenses/{licenseNumber} {
-      // Paid/admin users can read; writes are admin-SDK only (ingest)
-      allow read: if canReadData();
+      // Paid/admin: full access. Free trial: a capped Travis sample of the feed
+      // (raw TABC data is already public; the cap keeps it a sample).
+      allow read: if canReadData()
+        || (request.auth != null
+            && resource.data.county == 'Travis'
+            && request.query.limit <= 50);
       allow write: if false;
     }
     match /establishments/{id} {
@@ -37,13 +41,8 @@ service cloud.firestore {
       }
     }
     match /leads/{id} {
-      // Paid/admin: full access. Free trial: Travis County + records 30+ days old
-      // only (the query must constrain county + recordDate, enforced here).
-      allow read: if canReadData()
-        || (request.auth != null
-            && resource.data.county == 'Travis'
-            && resource.data.recordDate is timestamp
-            && resource.data.recordDate < request.time - duration.value(30, 'd'));
+      // Leads + CRM are a Pro feature — paid/admin only.
+      allow read: if canReadData();
       allow write: if isAdmin();
       // CRM subcollections: authenticated users can read/manage contacts + activity.
       match /contacts/{contactId} {

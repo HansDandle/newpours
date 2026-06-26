@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/components/shared/AuthProvider";
 import Link from "next/link";
 
 interface UserRow {
@@ -12,6 +13,7 @@ interface UserRow {
   planStatus: string;
   createdAt: any;
   stripeCustomerId?: string;
+  compedAccess?: boolean;
 }
 
 const PLAN_PRICES: Record<string, number> = { free: 0, basic: 29, pro: 79, enterprise: 299 };
@@ -36,10 +38,14 @@ const statusBadge = (status: string) => {
 };
 
 export default function AdminUsersPage() {
+  const { user } = useAuth();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState("");
+  const [grantEmail, setGrantEmail] = useState("");
+  const [busy, setBusy] = useState<string | null>(null); // email currently being changed
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     getDocs(collection(db, "users"))
@@ -48,6 +54,41 @@ export default function AdminUsersPage() {
       )
       .finally(() => setLoading(false));
   }, []);
+
+  async function changeAccess(email: string, action: "grant" | "revoke") {
+    const target = email.trim().toLowerCase();
+    if (!target) return;
+    setBusy(target);
+    try {
+      const token = await user?.getIdToken?.();
+      const res = await fetch("/api/admin/grant-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ email: target, action, plan: "pro" }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        const newPlan = action === "grant" ? "pro" : "free";
+        const newStatus = action === "grant" ? "active" : "canceled";
+        setUsers((prev) =>
+          prev.map((u) =>
+            u.uid === json.uid
+              ? { ...u, plan: newPlan, planStatus: newStatus, compedAccess: action === "grant" }
+              : u
+          )
+        );
+        setToast(action === "grant" ? `✓ Granted pro access to ${target}.` : `✓ Revoked access for ${target}.`);
+        if (action === "grant") setGrantEmail("");
+      } else {
+        setToast(`Error: ${json.error ?? "unknown"}`);
+      }
+    } catch {
+      setToast("Request failed.");
+    } finally {
+      setBusy(null);
+      setTimeout(() => setToast(null), 6000);
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -71,6 +112,12 @@ export default function AdminUsersPage() {
 
   return (
     <div className="p-8">
+      {toast && (
+        <div className="fixed bottom-6 right-6 bg-gray-700 text-white text-sm px-4 py-3 rounded-lg shadow-lg z-50">
+          {toast}
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-white">Users & Billing</h1>
         <div className="text-sm text-gray-400">
@@ -78,6 +125,34 @@ export default function AdminUsersPage() {
           {" "}·{" "}
           {users.filter((u) => u.planStatus === "active").length} active subscribers
         </div>
+      </div>
+
+      {/* Invite / grant full access without Stripe (comped). The person must have
+          signed up (free) first — the grant attaches to their existing account. */}
+      <div className="mb-6 rounded-lg border border-gray-800 bg-gray-900/50 p-4">
+        <h2 className="text-xs text-gray-500 uppercase tracking-widest mb-2">Grant Full Access</h2>
+        <p className="text-xs text-gray-500 mb-3">
+          Gives a person full (pro) access without billing or admin powers. They must have signed up once already.
+        </p>
+        <form
+          onSubmit={(e) => { e.preventDefault(); changeAccess(grantEmail, "grant"); }}
+          className="flex gap-2 flex-wrap"
+        >
+          <input
+            type="email"
+            placeholder="person@example.com"
+            value={grantEmail}
+            onChange={(e) => setGrantEmail(e.target.value)}
+            className="bg-gray-800 border border-gray-700 text-sm text-gray-100 placeholder-gray-500 rounded px-3 py-2 w-72 focus:outline-none focus:ring-1 focus:ring-[var(--brand-accent)]"
+          />
+          <button
+            type="submit"
+            disabled={!grantEmail.trim() || busy === grantEmail.trim().toLowerCase()}
+            className="btn-accent px-4 py-2 text-sm rounded disabled:opacity-50"
+          >
+            {busy === grantEmail.trim().toLowerCase() ? "Granting…" : "Grant pro access"}
+          </button>
+        </form>
       </div>
 
       <div className="flex gap-3 mb-5 flex-wrap">
@@ -121,6 +196,11 @@ export default function AdminUsersPage() {
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${planBadge(u.plan)}`}>
                       {u.plan}
                     </span>
+                    {u.compedAccess && (
+                      <span className="ml-1.5 px-2 py-0.5 rounded text-xs font-medium bg-emerald-900/60 text-emerald-300">
+                        comped
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusBadge(u.planStatus)}`}>
@@ -149,6 +229,25 @@ export default function AdminUsersPage() {
                           Stripe ↗
                         </a>
                       )}
+                      {u.compedAccess || u.planStatus !== "active" ? (
+                        u.compedAccess ? (
+                          <button
+                            onClick={() => changeAccess(u.email, "revoke")}
+                            disabled={busy === u.email?.toLowerCase()}
+                            className="px-2 py-1 bg-red-900/60 hover:bg-red-800 text-red-300 rounded text-xs disabled:opacity-50"
+                          >
+                            {busy === u.email?.toLowerCase() ? "…" : "Revoke"}
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => changeAccess(u.email, "grant")}
+                            disabled={busy === u.email?.toLowerCase()}
+                            className="px-2 py-1 bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 rounded text-xs disabled:opacity-50"
+                          >
+                            {busy === u.email?.toLowerCase() ? "…" : "Grant"}
+                          </button>
+                        )
+                      ) : null}
                     </div>
                   </td>
                 </tr>

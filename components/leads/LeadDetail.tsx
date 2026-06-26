@@ -25,6 +25,7 @@ export const SIGNAL_LABELS: Record<string, string> = {
   high_value_buildout: "High-value build-out",
   multifamily: "New apartments",
   large_nonprofit: "Large nonprofit",
+  heavy_advertiser: "Heavy advertiser",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -34,6 +35,7 @@ const SOURCE_LABELS: Record<string, string> = {
   event: "Event permit",
   building_permit: "Apartment building permit",
   nonprofit_990: "Nonprofit (IRS 990)",
+  attorney: "Law firm (Google Places)",
 };
 
 function fmtDate(value: any) {

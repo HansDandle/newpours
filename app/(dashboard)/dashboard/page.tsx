@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
-import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { EstablishmentClassification, License, PlanStatus, UserPlan } from "@/types";
 import { getLicenseTypeInfo, TABC_LICENSE_TYPES } from "@/lib/tabc-license-types";
 
@@ -369,9 +368,22 @@ export default function DashboardPage() {
       return;
     }
     if (!fullAccess) {
-      // Free trial doesn't include the Alert Feed (licenses) — skip the query.
-      setLicenses([]);
-      setLoading(false);
+      // Free trial: a capped Travis sample of the feed (older than 30 days),
+      // no enrichment. The 50-row cap is enforced by the security rules.
+      setFetchError(null);
+      const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
+      getDocs(
+        query(
+          collection(db, "licenses"),
+          where("county", "==", "Travis"),
+          where("applicationDate", "<", cutoff),
+          orderBy("applicationDate", "desc"),
+          limit(50)
+        )
+      )
+        .then((snap) => setLicenses(snap.docs.map((d) => ({ ...d.data(), licenseNumber: d.id } as License))))
+        .catch((err) => setFetchError((err as Error)?.message ?? "Unknown error"))
+        .finally(() => setLoading(false));
       return;
     }
     if (counties.size === 0) {
@@ -571,10 +583,14 @@ export default function DashboardPage() {
     URL.revokeObjectURL(url);
   };
 
-  if (!fullAccess) return <UpgradeGate feature="Alert Feed" />;
-
   return (
     <section>
+      {!fullAccess && (
+        <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <strong>Free sample</strong> — a slice of the Travis County feed (older filings).{" "}
+          <a href="/pricing" className="font-semibold underline hover:no-underline">Upgrade</a> for every county, live filings, enriched leads, and the CRM.
+        </div>
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-on-light">License Alerts</h1>

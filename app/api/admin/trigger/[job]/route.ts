@@ -11,6 +11,7 @@ const VALID_JOBS = [
   "multifamily_ingest",
   "multifamily_pm",
   "nonprofit_ingest",
+  "attorney_ingest",
   "recategorize",
   "lead_places",
   "apollo_enrich",

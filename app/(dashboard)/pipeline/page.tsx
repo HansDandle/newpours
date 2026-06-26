@@ -6,22 +6,25 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import { CRM_STAGES, setStage } from "@/lib/crm";
 import LeadDetail from "@/components/leads/LeadDetail";
+import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { Lead, CrmStage } from "@/types";
 
 type LeadRow = Lead & { id: string };
 
 export default function PipelinePage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, userPlan, userPlanStatus } = useAuth();
+  const fullAccess = isAdmin || ((userPlan === "pro" || userPlan === "enterprise") && userPlanStatus === "active");
   const [rows, setRows] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [dragId, setDragId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!fullAccess) { setLoading(false); return; }
     getDocs(collection(db, "leads"))
       .then((snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeadRow))))
       .finally(() => setLoading(false));
-  }, []);
+  }, [fullAccess]);
 
   const byStage = useMemo(() => {
     const map: Record<string, LeadRow[]> = {};
@@ -49,6 +52,8 @@ export default function PipelinePage() {
   };
 
   const openLead = rows.find((r) => r.id === openId) ?? null;
+
+  if (!fullAccess) return <UpgradeGate feature="Pipeline (CRM)" />;
 
   return (
     <section className="space-y-5">

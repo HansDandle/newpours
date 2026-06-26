@@ -17,6 +17,7 @@ import { runTabsJob } from './ingestTabs';
 import { runMultifamilyJob } from './ingestMultifamily';
 import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { runNonprofitsJob } from './ingestNonprofits';
+import { runAttorneysJob } from './ingestAttorneys';
 import { computeCategory } from './categorize';
 import { runApolloJob } from './enrichApollo';
 import { runLeadPlacesJob } from './enrichLeadPlaces';
@@ -399,6 +400,14 @@ export const processAdminTrigger = onDocumentCreated(
         const result = await runNonprofitsJob();
         processed = result.created;
         notes = `Nonprofit 990 ingest (>$1MM, coverage counties): created=${result.created}, matched=${result.matched}, scanned=${result.scanned}`;
+      } else if (jobName === 'attorney_ingest') {
+        const minReviewsRaw = Number(data.minReviews);
+        const result = await runAttorneysJob({
+          county: countyFilter || undefined,
+          minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
+        });
+        processed = result.created;
+        notes = `Attorney ingest (Google Places${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, heavyAdvertisers=${result.matched}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'health_inspections') {
         const result = await runHealthInspectionsJob(500, {
           county: countyFilter || undefined,

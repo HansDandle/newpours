@@ -102,7 +102,7 @@ export interface Alert {
 // references it (TABC license, TABC temp/event permit, TDLR/TABS construction
 // permit, city event permit). Replaces `establishments` as the product spine.
 
-export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990';
+export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney';
 
 /**
  * Advertising-oriented lead-quality signals (replaces the alcohol-vendor
@@ -117,7 +117,8 @@ export type LeadSignal =
   | 'multi_unit_operator' // owner tied to multiple locations
   | 'high_value_buildout' // TABS estimated cost over threshold
   | 'multifamily'         // new apartment community (Austin 5+ unit building permit)
-  | 'large_nonprofit';    // nonprofit with >$1MM revenue on its latest IRS 990
+  | 'large_nonprofit'     // nonprofit with >$1MM revenue on its latest IRS 990
+  | 'heavy_advertiser';   // law firm with a high review count (proxy for ad spend)
 
 export type CrmStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
 

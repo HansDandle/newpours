@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/components/shared/AuthProvider";
 import MultiSelect from "@/components/shared/MultiSelect";
 import LeadDetail, { SIGNAL_LABELS } from "@/components/leads/LeadDetail";
 import { matchOperatorQuery, loadOperators, type OperatorDef } from "@/lib/operators";
+import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { Lead, LeadSourceType, LeadSignal } from "@/types";
 
 const LEADS_CACHE_KEY = "newpours.leads.cache.v1";
@@ -16,6 +17,7 @@ const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "tabs_permit", label: "Construction permit (TABS)" },
   { value: "building_permit", label: "Apartments (building permit)" },
   { value: "nonprofit_990", label: "Nonprofit ($1MM+ 990)" },
+  { value: "attorney", label: "Law firm (heavy advertiser)" },
   { value: "tabc", label: "TABC license" },
   { value: "tabc_event", label: "TABC event permit" },
   { value: "event", label: "Event permit" },
@@ -52,9 +54,6 @@ function csvEscape(value: unknown) {
   return /[",\n]/.test(s) ? `"${s.replaceAll('"', '""')}"` : s;
 }
 
-const FREE_COUNTY = "Travis";
-const FREE_AGE_DAYS = 31; // query buffer over the rules' 30-day gate
-
 export default function LeadsPage() {
   const { user, isAdmin, userPlan, userPlanStatus, loading: authLoading } = useAuth();
   const fullAccess = isAdmin || ((userPlan === "pro" || userPlan === "enterprise") && userPlanStatus === "active");
@@ -77,9 +76,9 @@ export default function LeadsPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    const cacheKey = LEADS_CACHE_KEY + (fullAccess ? ".full" : ".free");
+    if (!fullAccess) { setLoading(false); return; } // Leads/CRM is Pro-only
     try {
-      const raw = sessionStorage.getItem(cacheKey);
+      const raw = sessionStorage.getItem(LEADS_CACHE_KEY);
       if (raw) {
         const { t, data } = JSON.parse(raw) as { t: number; data: LeadRow[] };
         if (Date.now() - t <= LEADS_CACHE_TTL) {
@@ -89,18 +88,10 @@ export default function LeadsPage() {
         }
       }
     } catch {}
-    // Free trial: only Travis + records 30+ days old (matches the Firestore rule).
-    const q = fullAccess
-      ? collection(db, "leads")
-      : query(
-          collection(db, "leads"),
-          where("county", "==", FREE_COUNTY),
-          where("recordDate", "<", Timestamp.fromMillis(Date.now() - FREE_AGE_DAYS * 86400000))
-        );
-    getDocs(q)
+    getDocs(collection(db, "leads"))
       .then((snap) => {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeadRow));
-        try { sessionStorage.setItem(cacheKey, JSON.stringify({ t: Date.now(), data })); } catch {}
+        try { sessionStorage.setItem(LEADS_CACHE_KEY, JSON.stringify({ t: Date.now(), data })); } catch {}
         setRows(data);
       })
       .finally(() => setLoading(false));
@@ -262,14 +253,10 @@ export default function LeadsPage() {
     URL.revokeObjectURL(url);
   };
 
+  if (!fullAccess) return <UpgradeGate feature="Leads & CRM" />;
+
   return (
     <section className="space-y-6">
-      {!fullAccess && (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong>Free trial</strong> — showing <strong>Travis County</strong> leads at least 30 days old.{" "}
-          <a href="/pricing" className="font-semibold underline hover:no-underline">Upgrade</a> for every county and the newest leads as they file.
-        </div>
-      )}
       <div className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(245,158,11,0.16),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f8fafc_100%)] p-6 shadow-sm">
         <p className="text-[11px] font-semibold uppercase tracking-[0.22em] accent">Leads</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">New businesses worth calling.</h1>
