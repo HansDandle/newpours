@@ -24,6 +24,8 @@ export default function AdminIntegrationsPage() {
   const [deliveries, setDeliveries] = useState<any[]>([]);
   const [hsTesting, setHsTesting] = useState(false);
   const [hsKeyVisible, setHsKeyVisible] = useState(false);
+  const [apTesting, setApTesting] = useState(false);
+  const [apKeyVisible, setApKeyVisible] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -65,6 +67,25 @@ export default function AdminIntegrationsPage() {
 
   const setHs = (patch: Partial<NonNullable<IntegrationSettings["hubspot"]>>) =>
     setSettings((s) => ({ ...s, hubspot: { ...s.hubspot, ...patch } }));
+
+  const setAp = (patch: Partial<NonNullable<IntegrationSettings["apollo"]>>) =>
+    setSettings((s) => ({ ...s, apollo: { ...s.apollo, ...patch } }));
+
+  const testApollo = async () => {
+    const key = settings.apollo?.apiKey;
+    if (!key) return;
+    setApTesting(true);
+    try {
+      const fn = httpsCallable(getFunctions(), "apolloTestConnection");
+      const res = await fn({ apiKey: key });
+      const data = res.data as { ok: boolean; message: string };
+      flash(data.ok ? `Apollo connected — key is valid ✓` : `Apollo error: ${data.message}`);
+    } catch (e: any) {
+      flash(`Apollo test failed: ${e?.message ?? "request error"}`);
+    } finally {
+      setApTesting(false);
+    }
+  };
 
   const testHubSpot = async () => {
     const key = settings.hubspot?.serviceKey;
@@ -208,6 +229,36 @@ export default function AdminIntegrationsPage() {
               </div>
               <p className="mt-2 text-[11px] text-gray-500">HubSpot's default Sales Pipeline stage IDs. If you use a custom pipeline, deal creation will fail with an invalid-stage error — tell me your stage IDs and I'll wire in a custom mapping.</p>
             </details>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={save} disabled={saving} className="btn-accent px-4 py-2 text-sm rounded disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>
+            </div>
+          </div>
+
+          {/* Apollo */}
+          <h2 className="text-xs text-gray-500 uppercase tracking-widest mt-8 mb-3">Apollo (contact enrichment)</h2>
+          <p className="text-sm text-gray-400 mb-4">Find the decision-maker and a verified work email for each lead (Search → Enrich). Emails flow into HubSpot for your campaigns. Consumes Apollo credits, so run it on ICP leads / on-demand.</p>
+          <div className="space-y-4 rounded-lg border border-gray-800 bg-gray-900 p-5">
+            <label className="flex items-center gap-2 text-sm text-gray-200">
+              <input type="checkbox" checked={!!settings.apollo?.enabled} onChange={(e) => setAp({ enabled: e.target.checked })} />
+              Enable Apollo enrichment
+            </label>
+
+            <label className="block text-xs text-gray-400">
+              API key
+              <div className="mt-1 flex gap-2">
+                <input
+                  type={apKeyVisible ? "text" : "password"}
+                  value={settings.apollo?.apiKey ?? ""}
+                  onChange={(e) => setAp({ apiKey: e.target.value })}
+                  placeholder="Apollo API key"
+                  className="flex-1 bg-gray-950 border border-gray-700 text-gray-200 rounded px-3 py-2 text-sm font-mono"
+                />
+                <button type="button" onClick={() => setApKeyVisible((v) => !v)} className="px-3 py-2 text-xs rounded bg-gray-800 hover:bg-gray-700 text-gray-300">{apKeyVisible ? "Hide" : "Show"}</button>
+                <button type="button" onClick={testApollo} disabled={apTesting || !settings.apollo?.apiKey} className="px-3 py-2 text-xs rounded bg-gray-700 hover:bg-gray-600 text-gray-200 disabled:opacity-50">{apTesting ? "Testing…" : "Test"}</button>
+              </div>
+              <span className="mt-1 block text-[11px] text-gray-500">Apollo → Settings → Integrations → API → create an API key. Hit rate improves a lot once leads have a website (run Google Places first).</span>
+            </label>
 
             <div className="flex gap-2 pt-2">
               <button onClick={save} disabled={saving} className="btn-accent px-4 py-2 text-sm rounded disabled:opacity-50">{saving ? "Saving…" : "Save"}</button>

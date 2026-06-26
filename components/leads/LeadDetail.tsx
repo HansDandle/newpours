@@ -103,6 +103,8 @@ export default function LeadDetail({
     setHsPushResult(null);
     setHsPushing(false);
     setSyncedNow(false);
+    setApResult(null);
+    setApBusy(false);
     let cancelled = false;
     (async () => {
       const [cSnap, aSnap] = await Promise.all([
@@ -157,6 +159,26 @@ export default function LeadDetail({
       setShowAddContact(false);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const [apBusy, setApBusy] = useState(false);
+  const [apResult, setApResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const handleApolloEnrich = async () => {
+    setApBusy(true);
+    setApResult(null);
+    try {
+      const fn = httpsCallable(getFunctions(), "apolloEnrichLead");
+      const res = await fn({ leadId: lead.id });
+      const d = res.data as { matched?: boolean; name?: string; title?: string; email?: string };
+      if (d.matched && d.email) setApResult({ ok: true, message: `${d.name}${d.title ? ` (${d.title})` : ""} — ${d.email}` });
+      else if (d.matched) setApResult({ ok: true, message: `${d.name ?? "Match"} found, but no email available` });
+      else setApResult({ ok: false, message: "No Apollo match" });
+    } catch (err: any) {
+      setApResult({ ok: false, message: err?.message ?? "Apollo lookup failed" });
+    } finally {
+      setApBusy(false);
     }
   };
 
@@ -298,6 +320,20 @@ export default function LeadDetail({
             {hsPushResult && (
               <span className={`text-xs font-medium ${hsPushResult.ok ? "text-green-600" : "text-red-500"}`}>
                 {hsPushResult.ok ? "✓" : "✗"} {hsPushResult.message}
+              </span>
+            )}
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              onClick={handleApolloEnrich}
+              disabled={apBusy}
+              className="rounded-full border border-indigo-400 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-500 hover:text-white transition disabled:opacity-40"
+            >
+              {apBusy ? "Searching…" : "Find contact (Apollo)"}
+            </button>
+            {apResult && (
+              <span className={`text-xs font-medium ${apResult.ok ? "text-green-600" : "text-red-500"}`}>
+                {apResult.ok ? "✓" : "✗"} {apResult.message}
               </span>
             )}
           </div>

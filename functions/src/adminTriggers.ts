@@ -18,6 +18,7 @@ import { runMultifamilyJob } from './ingestMultifamily';
 import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { runNonprofitsJob } from './ingestNonprofits';
 import { computeCategory } from './categorize';
+import { runApolloJob } from './enrichApollo';
 import { upsertTabcLead } from './tabcLeads';
 import { loadOperators, resolveOperator } from './operators';
 import { runGenerateSummary } from './generateSummary';
@@ -497,6 +498,10 @@ export const processAdminTrigger = onDocumentCreated(
         processed = changed;
         notes = `Re-tag operators: changed=${changed}. ` +
           Object.entries(counts).map(([n, c]) => `${n}:${c}`).join(', ');
+      } else if (jobName === 'apollo_enrich') {
+        const result = await runApolloJob({ limit: 100 });
+        processed = result.withEmail;
+        notes = `Apollo enrichment: withEmail=${result.withEmail}, no_match=${result.noMatch}, processed=${result.processed}`;
       } else if (jobName === 'recategorize') {
         const leadsSnap = await db.collection('leads').get();
         const counts: Record<string, number> = {};

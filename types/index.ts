@@ -236,6 +236,10 @@ export interface IntegrationSettings {
     /** Lead signals that qualify a lead for auto-sync (operator-linked leads always qualify). */
     icpSignals?: LeadSignal[];
   };
+  apollo?: {
+    apiKey?: string;
+    enabled?: boolean;
+  };
 }
 
 export interface Export {
