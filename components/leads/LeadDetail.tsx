@@ -14,7 +14,7 @@ import {
   clearOperatorLock,
 } from "@/lib/crm";
 import { loadOperators, type OperatorDef } from "@/lib/operators";
-import { lookupRadioWorkflow, type RwAccount } from "@/lib/radioworkflow";
+import { lookupRadioWorkflowMany, type RwAccount } from "@/lib/radioworkflow";
 
 export const SIGNAL_LABELS: Record<string, string> = {
   opening_soon: "Opening soon",
@@ -187,7 +187,22 @@ export default function LeadDetail({
     setRwError(null);
     setRwAccounts(null);
     try {
-      const res = await lookupRadioWorkflow(lead.businessName);
+      // Search the name (RW matches it fuzzily) plus a suffix-stripped variant and
+      // every known email/phone, so we catch accounts filed under a different name.
+      const name = lead.businessName ?? "";
+      const cored = name
+        .replace(/\b(llc|inc|co|corp|ltd|the|company|group|llp|lp)\b/gi, "")
+        .replace(/[.,]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const terms = [
+        name,
+        ...(cored && cored.toLowerCase() !== name.toLowerCase() ? [cored] : []),
+        ...(lead.emails ?? []),
+        ...(lead.phones ?? []),
+        ...(lead.phones ?? []).map((p) => p.replace(/\D/g, "")),
+      ];
+      const res = await lookupRadioWorkflowMany(terms);
       if (res.ok) setRwAccounts(res.results ?? []);
       else setRwError(res.error ?? "Lookup failed.");
     } finally {

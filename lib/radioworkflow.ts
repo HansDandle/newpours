@@ -51,6 +51,38 @@ export function rwExtensionReady(): boolean {
   return extReady;
 }
 
+/**
+ * Look up across several terms (business name + known emails/phones) and merge the
+ * matches, de-duplicated by account id. RadioWorkflow's `term` search is already
+ * fuzzy on the name; searching the emails/phones too catches accounts filed under
+ * a different name. Resolves (never rejects).
+ */
+export async function lookupRadioWorkflowMany(terms: string[], timeoutMs = 9000): Promise<RwLookupResult> {
+  const unique = Array.from(
+    new Set(terms.map((t) => String(t ?? "").trim()).filter((t) => t.length >= 3))
+  ).slice(0, 6); // cap the number of round-trips
+  if (!unique.length) return { ok: false, error: "Nothing to search on (no name, email, or phone)." };
+
+  const settled = await Promise.all(unique.map((t) => lookupRadioWorkflow(t, timeoutMs)));
+
+  const merged = new Map<string, RwAccount>();
+  let anyOk = false;
+  let needsAuth = false;
+  let firstError: string | undefined;
+  for (const r of settled) {
+    if (r.ok) {
+      anyOk = true;
+      for (const a of r.results ?? []) merged.set(String(a.id), a);
+    } else {
+      if (r.needsAuth) needsAuth = true;
+      if (!firstError) firstError = r.error;
+    }
+  }
+
+  if (!anyOk) return { ok: false, needsAuth, error: firstError ?? "Lookup failed." };
+  return { ok: true, results: Array.from(merged.values()) };
+}
+
 /** Look up RadioWorkflow accounts matching `term`. Resolves (never rejects). */
 export function lookupRadioWorkflow(term: string, timeoutMs = 9000): Promise<RwLookupResult> {
   if (typeof window === "undefined") return Promise.resolve({ ok: false, error: "No window" });
