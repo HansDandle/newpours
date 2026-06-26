@@ -210,6 +210,34 @@ export default function LeadDetail({
             </span>
           )}
         </div>
+
+        {/* Quick research — open the lead's name + address in external tools. */}
+        {(() => {
+          const q = [lead.businessName, lead.address, lead.city].filter(Boolean).join(" ");
+          const eq = encodeURIComponent(q);
+          const links = [
+            { label: "Google", href: `https://www.google.com/search?q=${eq}` },
+            { label: "Maps", href: `https://www.google.com/maps/search/?api=1&query=${eq}` },
+            { label: "News", href: `https://www.google.com/search?q=${eq}&tbm=nws` },
+            { label: "Facebook", href: `https://www.facebook.com/search/top?q=${encodeURIComponent([lead.businessName, lead.city].filter(Boolean).join(" "))}` },
+          ];
+          return (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Research</span>
+              {links.map((l) => (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]"
+                >
+                  {l.label} ↗
+                </a>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* CRM stage selector */}
