@@ -76,6 +76,19 @@ const apolloHeaders = (apiKey: string) => ({
   'Cache-Control': 'no-cache',
 });
 
+/** Build a legible error from an Apollo non-OK response (includes Apollo's own message). */
+async function apolloError(stage: string, res: Response): Promise<string> {
+  const body = await res.text().catch(() => '');
+  const detail = body ? `: ${body.slice(0, 300)}` : '';
+  if (res.status === 401) return `Apollo ${stage} rejected the API key (401). Check the key in Admin → Integrations.`;
+  if (res.status === 403) {
+    return `Apollo ${stage} returned 403 — your Apollo plan/key isn't authorized for the ${stage} API. ` +
+      `Use a master API key from Apollo Settings → Integrations → API on a plan that includes API access${detail}`;
+  }
+  if (res.status === 429) return `Apollo ${stage} rate-limited (429). Wait and retry${detail}`;
+  return `Apollo ${stage} HTTP ${res.status}${detail}`;
+}
+
 /** Step 1 — find candidate people at the org by domain (preferred) or name keyword. */
 async function searchPeople(apiKey: string, opts: { domain?: string; orgName?: string; titles: string[] }): Promise<ApolloPerson[]> {
   const body: Record<string, any> = { page: 1, per_page: 5, person_titles: opts.titles };
@@ -84,7 +97,7 @@ async function searchPeople(apiKey: string, opts: { domain?: string; orgName?: s
   else return [];
 
   const res = await fetch(SEARCH_URL, { method: 'POST', headers: apolloHeaders(apiKey), body: JSON.stringify(body) });
-  if (!res.ok) throw new Error(`Apollo search HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await apolloError('search', res));
   const json = (await res.json()) as { people?: ApolloPerson[] };
   return Array.isArray(json.people) ? json.people : [];
 }
@@ -96,7 +109,7 @@ async function enrichById(apiKey: string, id: string): Promise<ApolloPerson | nu
     headers: apolloHeaders(apiKey),
     body: JSON.stringify({ details: [{ id }] }),
   });
-  if (!res.ok) throw new Error(`Apollo match HTTP ${res.status}`);
+  if (!res.ok) throw new Error(await apolloError('match', res));
   const json = (await res.json()) as { matches?: ApolloPerson[] };
   return json.matches?.[0] ?? null;
 }
@@ -215,8 +228,11 @@ export const apolloEnrichLead = onCall({ cors: true }, async (request) => {
   try {
     return await apolloEnrichOne(leadId, snap.data() as Record<string, any>, settings.apiKey);
   } catch (err: any) {
-    console.error('Apollo enrich failed:', err?.message ?? err);
-    throw new HttpsError('internal', err?.message ?? 'Apollo enrichment failed');
+    const msg = err?.message ?? 'Apollo enrichment failed';
+    console.error('Apollo enrich failed:', msg);
+    // Surface key/plan problems as a precondition failure (not a generic 500).
+    const code = /\b(401|403)\b/.test(msg) ? 'failed-precondition' : 'internal';
+    throw new HttpsError(code, msg);
   }
 });
 
