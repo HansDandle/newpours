@@ -1,21 +1,26 @@
 /**
- * Sun Radio HS-football broadcast footprint — the Central Texas towns whose games
- * Sun Radio carries. A business's "footprint" = how many of these towns it operates
- * in, which drives the football-sponsor campaign fit (a regional advertiser wanting
+ * Sun Radio HS-football broadcast footprint — the towns whose games Sun Radio
+ * carries. A business's "footprint" = how many of these towns it operates in,
+ * which drives the football-sponsor campaign fit (a regional advertiser wanting
  * goodwill across the whole map is the ideal sponsor).
  *
- * SEED LIST — replace with Sun Radio's exact 35+ city list. Edit here; everything
- * downstream (bank ingest footprint, campaign fit) reads from this one source.
+ * Derived from Sun Radio's school list; where a high school's name differs from
+ * its FDIC city, we use the city (the names below in comments are the schools):
+ *   Hays HS → Kyle · Lake Travis HS → Lakeway · Harlan HS → San Antonio ·
+ *   Furr HS → Houston · Navarro/Geronimo → Geronimo
+ * Edit here; everything downstream (bank ingest footprint, campaign fit) reads
+ * from this one source.
  */
 
 export const BROADCAST_CITIES: string[] = [
-  'Austin', 'Round Rock', 'Cedar Park', 'Georgetown', 'Pflugerville', 'Leander',
-  'Hutto', 'Taylor', 'Elgin', 'Bastrop', 'Smithville', 'Lockhart', 'Luling',
-  'San Marcos', 'Kyle', 'Buda', 'Dripping Springs', 'Wimberley', 'New Braunfels',
-  'Seguin', 'Marble Falls', 'Burnet', 'Llano', 'Fredericksburg', 'Johnson City',
-  'Blanco', 'Lampasas', 'Killeen', 'Copperas Cove', 'Harker Heights', 'Belton',
-  'Temple', 'Salado', 'Gatesville', 'Lago Vista', 'Liberty Hill', 'Manor',
-  'Bertram', 'Granger', 'Florence',
+  'Austin', 'Bandera', 'Blanco', 'Brady', 'Buda', 'Comfort', 'Cuero',
+  'Del Valle', 'Dripping Springs', 'El Campo', 'Florence', 'Houston',     // Furr HS
+  'Geronimo',                                                             // Navarro ISD
+  'Giddings', 'Gonzales', 'Harker Heights', 'San Antonio',               // incl. Harlan HS
+  'Kyle',                                                                 // Hays HS
+  'Ingram', 'La Grange', 'Lago Vista', 'Lakeway',                        // Lake Travis HS
+  'Lexington', 'Llano', 'Manor', 'Marion', 'Mathis', 'Pearsall',
+  'Rockdale', 'Round Rock', 'Sinton', 'Smithville', 'Wimberley',
 ];
 
 /** Normalized lookup set for fast, case-insensitive city matching. */
