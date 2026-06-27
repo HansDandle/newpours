@@ -19,6 +19,7 @@ import { runMultifamilyPmJob } from './enrichMultifamilyPm';
 import { runNonprofitsJob } from './ingestNonprofits';
 import { runAttorneysJob } from './ingestAttorneys';
 import { runBanksJob } from './ingestBanks';
+import { runMedicalJob } from './ingestMedical';
 import { computeCampaignFit } from './campaignFit';
 import { computeCategory } from './categorize';
 import { runApolloJob } from './enrichApollo';
@@ -414,6 +415,10 @@ export const processAdminTrigger = onDocumentCreated(
         const result = await runBanksJob();
         processed = result.created;
         notes = `Bank/branch ingest (FDIC, broadcast footprint): created=${result.created}, institutions=${result.institutions}, branchesInFootprint=${result.inFootprint}, txBranchesScanned=${result.branches}`;
+      } else if (jobName === 'medical_ingest') {
+        const result = await runMedicalJob({ county: countyFilter || undefined });
+        processed = result.created;
+        notes = `Medical ingest (NPPES${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'recompute_fit') {
         const leadsSnap = await db.collection('leads').get();
         let changed = 0;

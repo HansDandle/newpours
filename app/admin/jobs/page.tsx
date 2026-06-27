@@ -13,6 +13,7 @@ const JOBS = [
   { key: "nonprofit_ingest", label: "Nonprofit 990 Ingest" },
   { key: "attorney_ingest", label: "Attorney Ingest" },
   { key: "bank_ingest", label: "Bank/Branch Ingest (FDIC)" },
+  { key: "medical_ingest", label: "Medical Ingest (NPPES)" },
   { key: "recategorize", label: "Recategorize Leads" },
   { key: "recompute_fit", label: "Recompute Campaign Fit" },
   { key: "lead_places", label: "Lead Website/Phone (Google)" },

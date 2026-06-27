@@ -102,7 +102,7 @@ export interface Alert {
 // references it (TABC license, TABC temp/event permit, TDLR/TABS construction
 // permit, city event permit). Replaces `establishments` as the product spine.
 
-export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney' | 'bank_branch';
+export type LeadSourceType = 'tabc' | 'tabc_event' | 'tabs_permit' | 'event' | 'building_permit' | 'nonprofit_990' | 'attorney' | 'bank_branch' | 'medical_npi';
 
 /**
  * Per-campaign fit scores (0–100) for Sun Radio's three distinct sells. One lead,

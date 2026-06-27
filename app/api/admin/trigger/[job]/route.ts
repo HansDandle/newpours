@@ -13,6 +13,7 @@ const VALID_JOBS = [
   "nonprofit_ingest",
   "attorney_ingest",
   "bank_ingest",
+  "medical_ingest",
   "recategorize",
   "recompute_fit",
   "lead_places",

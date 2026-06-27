@@ -66,6 +66,9 @@ export function computeCategory(input: CategorizeInput): LeadCategory {
   // Bank / credit-union branch network.
   if (hasType('bank_branch')) return 'Financial';
 
+  // Medical facility from the NPPES registry.
+  if (hasType('medical_npi')) return 'Medical';
+
   // Keyword match across the name + permit descriptions + license type.
   const parts: string[] = [input.businessName ?? ''];
   for (const s of sources) {

@@ -7,6 +7,7 @@ export { apolloEnrichLead, apolloTestConnection } from './enrichApollo';
 export { enrichLeadPlaces, enrichLeadPlacesLead } from './enrichLeadPlaces';
 export { ingestAttorneys } from './ingestAttorneys';
 export { ingestBanks } from './ingestBanks';
+export { ingestMedical } from './ingestMedical';
 export { enrichLicense, enrichNewEstablishment, enrichGooglePlacesForEstablishment, runGooglePlacesJob } from './enrich';
 export { enrichComptrollerRevenue } from './enrichComptroller';
 export { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';
