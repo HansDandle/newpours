@@ -1,10 +1,19 @@
-# PourScout × RadioWorkflow Lookup (browser extension)
+# PourScout browser extension (RadioWorkflow + Meta ad detection)
 
-Lets you look up a RadioWorkflow account — its **owner** (which rep has it),
-**prospect/client status**, and contact — from inside a PourScout lead, without
-switching tabs. The lookup runs in *your* browser using *your* logged-in
-RadioWorkflow session, so there's no CORS or Cloudflare problem and no cookies
-are ever stored on a server.
+Two things from inside a PourScout lead, without switching tabs:
+- **RadioWorkflow lookup** — the account's **owner** (which rep has it),
+  **prospect/client status**, and contact.
+- **Meta ad detection** — checks the **Meta Ad Library** for active ads and
+  auto-sets the lead's "Running ads" flag (which boosts campaign-fit scores).
+
+Both run in *your* browser using *your* session/IP, so there's no CORS,
+Cloudflare, or bot-block problem, and no cookies are ever stored on a server.
+
+> **Reinstall after updating:** v1.1 adds the `facebook.com` permission. After
+> pulling, remove the old temporary add-on and load it again so the new
+> permission takes effect. The Meta detection is best-effort — Meta's Ad Library
+> is an unofficial endpoint, so if it ever stops returning a count, the manual
+> "Running ads?" toggle on the lead still works.
 
 ## How it works
 - A content script is injected only on `pourscout.com` (and `localhost` for dev).

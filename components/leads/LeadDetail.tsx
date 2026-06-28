@@ -14,7 +14,7 @@ import {
   clearOperatorLock,
 } from "@/lib/crm";
 import { loadOperators, type OperatorDef } from "@/lib/operators";
-import { lookupRadioWorkflowMany, type RwAccount } from "@/lib/radioworkflow";
+import { lookupRadioWorkflowMany, lookupMetaAds, type RwAccount } from "@/lib/radioworkflow";
 
 export const SIGNAL_LABELS: Record<string, string> = {
   opening_soon: "Opening soon",
@@ -190,9 +190,9 @@ export default function LeadDetail({
   const [showLinks, setShowLinks] = useState(false);
   const [advertiser, setAdvertiser] = useState<boolean>((lead.signals ?? []).includes("active_advertiser"));
   const [adBusy, setAdBusy] = useState(false);
+  const [metaAdCount, setMetaAdCount] = useState<number | null>(null);
 
-  const toggleAdvertiser = async () => {
-    const next = !advertiser;
+  const setAdvertiserTo = async (next: boolean) => {
     setAdBusy(true);
     setAdvertiser(next); // optimistic
     try {
@@ -206,6 +206,18 @@ export default function LeadDetail({
       setAdvertiser(!next); // revert on failure
     } finally {
       setAdBusy(false);
+    }
+  };
+
+  const toggleAdvertiser = () => setAdvertiserTo(!advertiser);
+
+  // Auto-detect Meta ad activity via the extension; flag the lead if it's running ads.
+  const checkMetaAds = async () => {
+    const res = await lookupMetaAds(lead.businessName);
+    if (!res?.ok || typeof res.count !== "number") return; // extension missing / Meta changed — stay silent
+    setMetaAdCount(res.count);
+    if (res.count > 0 && !(lead.signals ?? []).includes("active_advertiser")) {
+      await setAdvertiserTo(true);
     }
   };
 
@@ -224,7 +236,9 @@ export default function LeadDetail({
     setRwAccounts(null);
     setRwError(null);
     setAdvertiser((lead.signals ?? []).includes("active_advertiser"));
+    setMetaAdCount(null);
     handleRadioWorkflow(true); // auto — silent if the extension isn't installed
+    checkMetaAds();            // auto-detect Meta ad activity (extension, your browser)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
 
@@ -426,6 +440,11 @@ export default function LeadDetail({
               >
                 {advertiser ? "✓ Running ads" : "Running ads?"}
               </button>
+              {metaAdCount !== null && metaAdCount > 0 && (
+                <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700" title="Active ads found in the Meta Ad Library">
+                  Meta: {metaAdCount} ad{metaAdCount === 1 ? "" : "s"}
+                </span>
+              )}
               {showLinks && links.map((l) => (
                 <a
                   key={l.label}

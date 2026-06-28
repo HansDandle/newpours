@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "PourScout × RadioWorkflow Lookup",
-  "version": "1.0.0",
-  "description": "Look up RadioWorkflow accounts (owner, contact, prospect status) from inside PourScout — using your own logged-in RadioWorkflow session.",
-  "host_permissions": ["*://www.radioworkflow.com/*"],
+  "version": "1.1.0",
+  "description": "Look up RadioWorkflow accounts and detect Meta ad activity from inside PourScout — using your own browser session.",
+  "host_permissions": ["*://www.radioworkflow.com/*", "*://www.facebook.com/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
     {

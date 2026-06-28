@@ -24,8 +24,8 @@ window.addEventListener('message', (event) => {
     return;
   }
 
-  if (d.kind === 'lookup') {
-    chrome.runtime.sendMessage({ kind: 'lookup', term: d.term }, (resp) => {
+  if (d.kind === 'lookup' || d.kind === 'meta_ads') {
+    chrome.runtime.sendMessage({ kind: d.kind, term: d.term }, (resp) => {
       const payload = chrome.runtime.lastError
         ? { ok: false, error: chrome.runtime.lastError.message }
         : resp;

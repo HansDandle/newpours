@@ -67,10 +67,72 @@ async function lookup(term) {
   return { ok: true, results };
 }
 
+// ── Meta Ad Library — "is this business running ads right now?" ──────────────
+// The Ad Library has no commercial API, only a token-gated internal endpoint.
+// Running from the user's browser (their IP/session) dodges the datacenter
+// bot-block. Best-effort: any failure returns ok:false so PourScout falls back
+// to the manual toggle rather than guessing.
+async function metaAdsLookup(term) {
+  const country = 'US';
+  const q = encodeURIComponent(term);
+
+  // 1) Load the Ad Library page to obtain a session LSD token.
+  let lsd = '';
+  try {
+    const pageRes = await fetch(
+      `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=${country}&q=${q}&search_type=keyword_unordered`,
+      { credentials: 'include' }
+    );
+    const html = await pageRes.text();
+    const m = html.match(/"LSD",\[\],\{"token":"([^"]+)"/) || html.match(/name="lsd"\s+value="([^"]+)"/);
+    if (m) lsd = m[1];
+  } catch (e) {
+    return { ok: false, error: 'Could not reach the Meta Ad Library.' };
+  }
+  if (!lsd) return { ok: false, error: 'Ad Library token not found (Meta may have changed its format).' };
+
+  // 2) Query the async search endpoint with the token.
+  try {
+    const body = new URLSearchParams({
+      q: term,
+      count: '30',
+      active_status: 'active',
+      ad_type: 'all',
+      countries: `["${country}"]`,
+      search_type: 'keyword_unordered',
+      media_type: 'all',
+      lsd,
+      __a: '1',
+    });
+    const res = await fetch('https://www.facebook.com/ads/library/async/search_ads/', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-fb-lsd': lsd },
+      body: body.toString(),
+    });
+    let text = await res.text();
+    text = text.replace(/^for \(;;\);/, '').replace(/^\)\]\}'/, '').trim();
+    const json = JSON.parse(text);
+    const payload = json.payload || json;
+    let count = 0;
+    if (Array.isArray(payload.results)) {
+      for (const r of payload.results) count += Array.isArray(r) ? r.length : 1;
+    }
+    if (typeof payload.totalCount === 'number' && payload.totalCount > count) count = payload.totalCount;
+    return { ok: true, count, active: count > 0 };
+  } catch (e) {
+    return { ok: false, error: 'Could not read Ad Library results (Meta may have changed its format).' };
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg && msg.kind === 'lookup') {
     lookup(String(msg.term || '')).then(sendResponse);
     return true; // keep the channel open for the async response
+  }
+  if (msg && msg.kind === 'meta_ads') {
+    metaAdsLookup(String(msg.term || '')).then(sendResponse);
+    return true;
   }
   return false;
 });

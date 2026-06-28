@@ -83,41 +83,52 @@ export async function lookupRadioWorkflowMany(terms: string[], timeoutMs = 9000)
   return { ok: true, results: Array.from(merged.values()) };
 }
 
-/** Look up RadioWorkflow accounts matching `term`. Resolves (never rejects). */
-export function lookupRadioWorkflow(term: string, timeoutMs = 9000): Promise<RwLookupResult> {
-  if (typeof window === "undefined") return Promise.resolve({ ok: false, error: "No window" });
-
+/** Send one request to the extension and await its reply (resolves, never rejects). */
+function extensionRequest<T>(kind: string, term: string, timeoutMs: number, onTimeout: T): Promise<T> {
+  if (typeof window === "undefined") return Promise.resolve(onTimeout);
   return new Promise((resolve) => {
     const id = Math.random().toString(36).slice(2);
     let done = false;
-
-    const finish = (r: RwLookupResult) => {
+    const finish = (r: T) => {
       if (done) return;
       done = true;
       window.removeEventListener("message", onMsg);
       resolve(r);
     };
-
     const onMsg = (e: MessageEvent) => {
       if (e.source !== window) return;
       const d = e.data;
       if (!d || d.source !== EXT) return;
       if (d.kind === "ready") extReady = true;
-      if (d.kind === "result" && d.id === id) finish(d.payload as RwLookupResult);
+      if (d.kind === "result" && d.id === id) finish(d.payload as T);
     };
-
     window.addEventListener("message", onMsg);
-    window.postMessage({ source: PAGE, kind: "lookup", id, term }, "*");
+    window.postMessage({ source: PAGE, kind, id, term }, "*");
+    setTimeout(() => finish(onTimeout), timeoutMs);
+  });
+}
 
-    setTimeout(
-      () =>
-        finish({
-          ok: false,
-          error: extReady
-            ? "RadioWorkflow lookup timed out."
-            : "RadioWorkflow extension not detected. Install it (see /extension) and reload.",
-        }),
-      timeoutMs
-    );
+/** Look up RadioWorkflow accounts matching `term`. Resolves (never rejects). */
+export function lookupRadioWorkflow(term: string, timeoutMs = 9000): Promise<RwLookupResult> {
+  return extensionRequest<RwLookupResult>("lookup", term, timeoutMs, {
+    ok: false,
+    error: extReady
+      ? "RadioWorkflow lookup timed out."
+      : "RadioWorkflow extension not detected. Install it (see /extension) and reload.",
+  });
+}
+
+export interface MetaAdsResult {
+  ok: boolean;
+  count?: number;
+  active?: boolean;
+  error?: string;
+}
+
+/** Check the Meta Ad Library for active ads from `term`. Resolves (never rejects). */
+export function lookupMetaAds(term: string, timeoutMs = 12000): Promise<MetaAdsResult> {
+  return extensionRequest<MetaAdsResult>("meta_ads", term, timeoutMs, {
+    ok: false,
+    error: extReady ? "Meta ad check timed out." : "Extension not detected.",
   });
 }
