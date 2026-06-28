@@ -185,6 +185,13 @@ export default function LeadDetail({
   const [newsBusy, setNewsBusy] = useState(false);
   const [newsItems, setNewsItems] = useState<{ title: string; source: string; link: string; date: string | null }[] | null>(null);
   const [newsError, setNewsError] = useState<string | null>(null);
+  const [showLinks, setShowLinks] = useState(false);
+
+  // One free, no-cost lookup: RadioWorkflow (your session) + Google News together.
+  const handleFreeLookup = () => {
+    handleRadioWorkflow();
+    handleNews();
+  };
 
   const handleNews = async () => {
     setNewsBusy(true);
@@ -356,8 +363,22 @@ export default function LeadDetail({
           ];
           return (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Research</span>
-              {links.map((l) => (
+              {/* One free lookup: RadioWorkflow + recent press together (no API cost). */}
+              <button
+                onClick={handleFreeLookup}
+                disabled={rwBusy || newsBusy}
+                className="inline-flex items-center rounded-full border border-emerald-400 bg-emerald-50 px-3 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500 hover:text-white transition disabled:opacity-40"
+                title="Free lookup — checks RadioWorkflow (your session) and recent news at once"
+              >
+                {rwBusy || newsBusy ? "Looking up…" : "Look up (free)"}
+              </button>
+              <button
+                onClick={() => setShowLinks((v) => !v)}
+                className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]"
+              >
+                Links {showLinks ? "▴" : "▾"}
+              </button>
+              {showLinks && links.map((l) => (
                 <a
                   key={l.label}
                   href={l.href}
@@ -368,22 +389,6 @@ export default function LeadDetail({
                   {l.label} ↗
                 </a>
               ))}
-              <button
-                onClick={handleRadioWorkflow}
-                disabled={rwBusy}
-                className="inline-flex items-center rounded-full border border-emerald-400 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-500 hover:text-white transition disabled:opacity-40"
-                title="Check whether this account is already in RadioWorkflow (needs the browser extension)"
-              >
-                {rwBusy ? "Checking…" : "RadioWorkflow"}
-              </button>
-              <button
-                onClick={handleNews}
-                disabled={newsBusy}
-                className="inline-flex items-center rounded-full border border-violet-400 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-500 hover:text-white transition disabled:opacity-40"
-                title="Recent news coverage (last 6 months) — a promotion/expansion moment to call on"
-              >
-                {newsBusy ? "Searching…" : "Press / News"}
-              </button>
             </div>
           );
         })()}
@@ -506,33 +511,40 @@ export default function LeadDetail({
               </span>
             )}
           </div>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              onClick={handleGooglePlaces}
-              disabled={gpBusy}
-              className="rounded-full border border-sky-400 px-3 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-500 hover:text-white transition disabled:opacity-40"
-            >
-              {gpBusy ? "Searching…" : "Find website/phone (Google)"}
-            </button>
-            {gpResult && (
-              <span className={`text-xs font-medium ${gpResult.ok ? "text-green-600" : "text-red-500"}`}>
-                {gpResult.ok ? "✓" : "✗"} {gpResult.message}
-              </span>
-            )}
-          </div>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              onClick={handleApolloEnrich}
-              disabled={apBusy}
-              className="rounded-full border border-indigo-400 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-500 hover:text-white transition disabled:opacity-40"
-            >
-              {apBusy ? "Searching…" : "Find contact (Apollo)"}
-            </button>
-            {apResult && (
-              <span className={`text-xs font-medium ${apResult.ok ? "text-green-600" : "text-red-500"}`}>
-                {apResult.ok ? "✓" : "✗"} {apResult.message}
-              </span>
-            )}
+          {/* Paid enrichment — kept separate + explicit so a click never silently
+              burns API credits. Run only when a lead is worth the spend. */}
+          <div className="mt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+              Enrich · uses paid APIs
+            </p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleGooglePlaces}
+                disabled={gpBusy}
+                className="rounded-full border border-sky-400 px-3 py-1 text-xs font-semibold text-sky-600 hover:bg-sky-500 hover:text-white transition disabled:opacity-40"
+                title="Google Places — cheap. Fills website + phone."
+              >
+                {gpBusy ? "Searching…" : "Website/phone (Google ¢)"}
+              </button>
+              {gpResult && (
+                <span className={`text-xs font-medium ${gpResult.ok ? "text-green-600" : "text-red-500"}`}>
+                  {gpResult.ok ? "✓" : "✗"} {gpResult.message}
+                </span>
+              )}
+              <button
+                onClick={handleApolloEnrich}
+                disabled={apBusy}
+                className="rounded-full border border-indigo-400 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-500 hover:text-white transition disabled:opacity-40"
+                title="Apollo — costs a credit per reveal. Finds a named contact + email."
+              >
+                {apBusy ? "Searching…" : "Contact + email (Apollo $)"}
+              </button>
+              {apResult && (
+                <span className={`text-xs font-medium ${apResult.ok ? "text-green-600" : "text-red-500"}`}>
+                  {apResult.ok ? "✓" : "✗"} {apResult.message}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
