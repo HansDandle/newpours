@@ -19,7 +19,7 @@ const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "nonprofit_990", label: "Nonprofit ($1MM+ 990)" },
   { value: "attorney", label: "Law firm (heavy advertiser)" },
   { value: "bank_branch", label: "Bank / credit union (branches)" },
-  { value: "medical_npi", label: "Medical facility (NPPES)" },
+  { value: "medical_npi", label: "Medical facility" },
   { value: "tabc", label: "TABC license" },
   { value: "tabc_event", label: "TABC event permit" },
   { value: "event", label: "Event permit" },

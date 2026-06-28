@@ -416,9 +416,13 @@ export const processAdminTrigger = onDocumentCreated(
         processed = result.created;
         notes = `Bank/branch ingest (FDIC, broadcast footprint): created=${result.created}, institutions=${result.institutions}, branchesInFootprint=${result.inFootprint}, txBranchesScanned=${result.branches}`;
       } else if (jobName === 'medical_ingest') {
-        const result = await runMedicalJob({ county: countyFilter || undefined });
+        const minReviewsRaw = Number(data.minReviews);
+        const result = await runMedicalJob({
+          county: countyFilter || undefined,
+          minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
+        });
         processed = result.created;
-        notes = `Medical ingest (NPPES${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Medical ingest (Google Places, >=100 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'recompute_fit') {
         const leadsSnap = await db.collection('leads').get();
         let changed = 0;

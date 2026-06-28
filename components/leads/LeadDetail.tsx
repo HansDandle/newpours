@@ -38,7 +38,7 @@ const SOURCE_LABELS: Record<string, string> = {
   nonprofit_990: "Nonprofit (IRS 990)",
   attorney: "Law firm (Google Places)",
   bank_branch: "Bank / credit union (FDIC)",
-  medical_npi: "Medical facility (NPPES)",
+  medical_npi: "Medical facility (Google)",
 };
 
 const CAMPAIGN_LABELS: { key: "underwriting" | "naming" | "football"; label: string }[] = [
