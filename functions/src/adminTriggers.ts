@@ -20,6 +20,7 @@ import { runNonprofitsJob } from './ingestNonprofits';
 import { runAttorneysJob } from './ingestAttorneys';
 import { runBanksJob } from './ingestBanks';
 import { runMedicalJob } from './ingestMedical';
+import { runNewsJob } from './enrichNews';
 import { computeCampaignFit } from './campaignFit';
 import { computeCategory } from './categorize';
 import { runApolloJob } from './enrichApollo';
@@ -423,6 +424,10 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.created;
         notes = `Medical ingest (Google Places, >=100 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+      } else if (jobName === 'news_enrich') {
+        const result = await runNewsJob({ limit: 500 });
+        processed = result.processed;
+        notes = `Press/news enrichment: processed=${result.processed}, withNews=${result.withNews}`;
       } else if (jobName === 'recompute_fit') {
         const leadsSnap = await db.collection('leads').get();
         let changed = 0;

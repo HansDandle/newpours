@@ -20,7 +20,8 @@ export type LeadSignal =
   | 'high_value_buildout'
   | 'multifamily'
   | 'large_nonprofit'
-  | 'heavy_advertiser';
+  | 'heavy_advertiser'
+  | 'in_the_news';
 
 export interface LeadSource {
   type: LeadSourceType;

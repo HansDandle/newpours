@@ -27,6 +27,7 @@ export const SIGNAL_LABELS: Record<string, string> = {
   multifamily: "New apartments",
   large_nonprofit: "Large nonprofit",
   heavy_advertiser: "Heavy advertiser",
+  in_the_news: "In the news",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -193,6 +194,18 @@ export default function LeadDetail({
     handleNews();
   };
 
+  // On opening a lead, surface the free signals automatically: show the press
+  // already enriched in the background, and run the (free) RadioWorkflow lookup.
+  useEffect(() => {
+    const stored = (lead.enrichment as any)?.news;
+    setNewsItems(stored?.items?.length ? stored.items : null); // only show if there's coverage
+    setNewsError(null);
+    setRwAccounts(null);
+    setRwError(null);
+    handleRadioWorkflow(true); // auto — silent if the extension isn't installed
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead.id]);
+
   const handleNews = async () => {
     setNewsBusy(true);
     setNewsError(null);
@@ -209,7 +222,7 @@ export default function LeadDetail({
     }
   };
 
-  const handleRadioWorkflow = async () => {
+  const handleRadioWorkflow = async (auto = false) => {
     setRwBusy(true);
     setRwError(null);
     setRwAccounts(null);
@@ -231,7 +244,7 @@ export default function LeadDetail({
       ];
       const res = await lookupRadioWorkflowMany(terms);
       if (res.ok) setRwAccounts(res.results ?? []);
-      else setRwError(res.error ?? "Lookup failed.");
+      else if (!auto) setRwError(res.error ?? "Lookup failed."); // stay quiet on auto-run
     } finally {
       setRwBusy(false);
     }

@@ -16,6 +16,7 @@ const VALID_JOBS = [
   "medical_ingest",
   "recategorize",
   "recompute_fit",
+  "news_enrich",
   "lead_places",
   "apollo_enrich",
   "dedup_pending",

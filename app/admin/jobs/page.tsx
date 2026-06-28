@@ -16,6 +16,7 @@ const JOBS = [
   { key: "medical_ingest", label: "Medical Ingest (Google 100+ reviews)" },
   { key: "recategorize", label: "Recategorize Leads" },
   { key: "recompute_fit", label: "Recompute Campaign Fit" },
+  { key: "news_enrich", label: "Press/News Enrichment" },
   { key: "lead_places", label: "Lead Website/Phone (Google)" },
   { key: "apollo_enrich", label: "Apollo Contact Enrichment" },
   { key: "dedup_pending", label: "Clean Up Stale Pending" },

@@ -36,26 +36,26 @@ export interface NewsItem {
   date: string | null;
 }
 
-export const newsLookup = onCall({ cors: true }, async (request) => {
-  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
-  const { businessName, city } = (request.data ?? {}) as { businessName?: string; city?: string };
-  const name = String(businessName ?? '').trim();
-  if (!name) throw new HttpsError('invalid-argument', 'businessName required');
-
+/**
+ * Fetch recent Google News coverage for a business. Shared by the on-demand
+ * callable and the background enrichment job. Returns up to `max` recent items.
+ */
+export async function fetchNews(
+  name: string,
+  city?: string,
+  opts?: { maxAgeDays?: number; max?: number }
+): Promise<{ count: number; items: NewsItem[] }> {
+  const maxAgeDays = opts?.maxAgeDays ?? MAX_AGE_DAYS;
+  const max = opts?.max ?? 8;
   // Quote the name to keep it as a phrase; add city to disambiguate common names.
   const q = `"${name}"${city ? ` ${city}` : ''}`;
   const url = `${GOOGLE_NEWS_RSS}?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
 
-  let xml: string;
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (PourScout news lookup)' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    xml = await res.text();
-  } catch (err: any) {
-    throw new HttpsError('unavailable', `News fetch failed: ${err?.message ?? err}`);
-  }
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (PourScout news lookup)' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const xml = await res.text();
 
-  const cutoff = Date.now() - MAX_AGE_DAYS * 86400000;
+  const cutoff = Date.now() - maxAgeDays * 86400000;
   const items: NewsItem[] = [];
   const blocks = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
   for (const b of blocks) {
@@ -69,8 +69,19 @@ export const newsLookup = onCall({ cors: true }, async (request) => {
     const ts = pub ? Date.parse(pub) : NaN;
     if (Number.isFinite(ts) && ts < cutoff) continue; // too old
     items.push({ title, source, link: tag(b, 'link'), date: pub || null });
-    if (items.length >= 8) break;
+    if (items.length >= max) break;
   }
-
   return { count: items.length, items };
+}
+
+export const newsLookup = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+  const { businessName, city } = (request.data ?? {}) as { businessName?: string; city?: string };
+  const name = String(businessName ?? '').trim();
+  if (!name) throw new HttpsError('invalid-argument', 'businessName required');
+  try {
+    return await fetchNews(name, city);
+  } catch (err: any) {
+    throw new HttpsError('unavailable', `News fetch failed: ${err?.message ?? err}`);
+  }
 });

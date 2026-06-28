@@ -100,7 +100,12 @@ export async function upsertLead(
     emails: unionStrings(existing?.emails, identity.emails),
     website: website ?? null,
     sources,
-    signals: computeSignals({ sources, website }),
+    // Derived signals from sources + identity, plus any externally-set signals
+    // (e.g. in_the_news from the news enrichment) that a re-ingest must not wipe.
+    signals: Array.from(new Set([
+      ...computeSignals({ sources, website }),
+      ...((existing?.signals ?? []) as string[]).filter((s) => s === 'in_the_news'),
+    ])),
     category: computeCategory({
       businessName: firstNonEmpty(existing?.businessName, identity.businessName) ?? identity.businessName,
       sources,

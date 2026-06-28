@@ -128,7 +128,8 @@ export type LeadSignal =
   | 'high_value_buildout' // TABS estimated cost over threshold
   | 'multifamily'         // new apartment community (Austin 5+ unit building permit)
   | 'large_nonprofit'     // nonprofit with >$1MM revenue on its latest IRS 990
-  | 'heavy_advertiser';   // law firm with a high review count (proxy for ad spend)
+  | 'heavy_advertiser'    // law firm with a high review count (proxy for ad spend)
+  | 'in_the_news';        // recent Google News coverage (a press/promotion moment)
 
 export type CrmStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
 
