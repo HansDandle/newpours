@@ -23,7 +23,7 @@ import { loadOperators } from './operators';
 
 if (!admin.apps.length) admin.initializeApp();
 
-const MIN_REVIEWS = 100; // proxy for an established, advertising facility
+const MIN_REVIEWS = 500; // proxy for an established, advertising facility (tuned down the small-practice tail)
 const MAX_LEADS = 2000;
 
 // Coverage cities -> county (the core 8-county market).
