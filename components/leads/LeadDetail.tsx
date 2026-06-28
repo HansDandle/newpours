@@ -28,6 +28,7 @@ export const SIGNAL_LABELS: Record<string, string> = {
   large_nonprofit: "Large nonprofit",
   heavy_advertiser: "Heavy advertiser",
   in_the_news: "In the news",
+  active_advertiser: "Running ads",
 };
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -187,6 +188,26 @@ export default function LeadDetail({
   const [newsItems, setNewsItems] = useState<{ title: string; source: string; link: string; date: string | null }[] | null>(null);
   const [newsError, setNewsError] = useState<string | null>(null);
   const [showLinks, setShowLinks] = useState(false);
+  const [advertiser, setAdvertiser] = useState<boolean>((lead.signals ?? []).includes("active_advertiser"));
+  const [adBusy, setAdBusy] = useState(false);
+
+  const toggleAdvertiser = async () => {
+    const next = !advertiser;
+    setAdBusy(true);
+    setAdvertiser(next); // optimistic
+    try {
+      const fn = httpsCallable(getFunctions(), "setLeadAdvertiser");
+      await fn({ leadId: lead.id, active: next });
+      // Keep the in-memory lead in sync so signals/score reflect it elsewhere.
+      lead.signals = next
+        ? Array.from(new Set([...(lead.signals ?? []), "active_advertiser"]))
+        : (lead.signals ?? []).filter((s) => s !== "active_advertiser");
+    } catch {
+      setAdvertiser(!next); // revert on failure
+    } finally {
+      setAdBusy(false);
+    }
+  };
 
   // One free, no-cost lookup: RadioWorkflow (your session) + Google News together.
   const handleFreeLookup = () => {
@@ -202,6 +223,7 @@ export default function LeadDetail({
     setNewsError(null);
     setRwAccounts(null);
     setRwError(null);
+    setAdvertiser((lead.signals ?? []).includes("active_advertiser"));
     handleRadioWorkflow(true); // auto — silent if the extension isn't installed
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead.id]);
@@ -390,6 +412,19 @@ export default function LeadDetail({
                 className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-500 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]"
               >
                 Links {showLinks ? "▴" : "▾"}
+              </button>
+              {/* Confirmed-advertiser toggle — flip after checking the Meta/Google ad links. */}
+              <button
+                onClick={toggleAdvertiser}
+                disabled={adBusy}
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition disabled:opacity-40 ${
+                  advertiser
+                    ? "border border-amber-500 bg-amber-500 text-white"
+                    : "border border-amber-400 bg-white text-amber-700 hover:bg-amber-50"
+                }`}
+                title="Mark this lead as a confirmed active advertiser (boosts campaign-fit scores)"
+              >
+                {advertiser ? "✓ Running ads" : "Running ads?"}
               </button>
               {showLinks && links.map((l) => (
                 <a

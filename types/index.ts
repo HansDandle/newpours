@@ -129,7 +129,8 @@ export type LeadSignal =
   | 'multifamily'         // new apartment community (Austin 5+ unit building permit)
   | 'large_nonprofit'     // nonprofit with >$1MM revenue on its latest IRS 990
   | 'heavy_advertiser'    // law firm with a high review count (proxy for ad spend)
-  | 'in_the_news';        // recent Google News coverage (a press/promotion moment)
+  | 'in_the_news'         // recent Google News coverage (a press/promotion moment)
+  | 'active_advertiser';  // confirmed running ads (Meta/Google) — set by a rep
 
 export type CrmStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
 

@@ -59,6 +59,7 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
   if (football === 0 && COMMUNITY_CATEGORIES.has(input.category ?? '')) football = 12;
   if (hasType('bank_branch') && footprint >= 3) football += 15; // banks are prototypical sponsors
   if (signals.has('in_the_news')) football += 5; // active/visible — warmer to approach
+  if (signals.has('active_advertiser')) football += 8; // already buys ads — proven budget+behavior
 
   // ── Underwriting: independent + local + established + can pay. ──
   let underwriting = 0;
@@ -71,6 +72,7 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
   if (!signals.has('brand_new') && !signals.has('opening_soon')) underwriting += 15;
   if (signals.has('multi_unit_operator')) underwriting += 10; // an independent local group
   if (signals.has('in_the_news')) underwriting += 10; // actively promoting itself ⇒ marketing-minded
+  if (signals.has('active_advertiser')) underwriting += 20; // already buys ads — the strongest fit
 
   // ── Naming: pure wealth/budget proxy — who can afford to name a building. ──
   let naming = 0;
@@ -82,6 +84,7 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
   if (signals.has('multi_unit_operator')) naming += 15;
   if (signals.has('heavy_advertiser')) naming += 12; // proven ad budget
   if (signals.has('in_the_news')) naming += 8; // prominent / visible in the community
+  if (signals.has('active_advertiser')) naming += 15; // proven they spend on advertising
 
   return { underwriting: clamp(underwriting), naming: clamp(naming), football: clamp(football) };
 }

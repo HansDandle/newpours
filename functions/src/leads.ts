@@ -19,6 +19,9 @@ import { computeCampaignFit } from './campaignFit';
 
 if (!admin.apps.length) admin.initializeApp();
 
+// Signals set outside computeSignals (enrichment / manual) — preserved across re-ingests.
+const EXTERNAL_SIGNALS = new Set(['in_the_news', 'active_advertiser']);
+
 export interface LeadIdentity {
   businessName: string;
   dba?: string;
@@ -101,10 +104,10 @@ export async function upsertLead(
     website: website ?? null,
     sources,
     // Derived signals from sources + identity, plus any externally-set signals
-    // (e.g. in_the_news from the news enrichment) that a re-ingest must not wipe.
+    // (news enrichment, manual "running ads" flag) that a re-ingest must not wipe.
     signals: Array.from(new Set([
       ...computeSignals({ sources, website }),
-      ...((existing?.signals ?? []) as string[]).filter((s) => s === 'in_the_news'),
+      ...((existing?.signals ?? []) as string[]).filter((s) => EXTERNAL_SIGNALS.has(s)),
     ])),
     category: computeCategory({
       businessName: firstNonEmpty(existing?.businessName, identity.businessName) ?? identity.businessName,

@@ -10,6 +10,7 @@ export { ingestBanks } from './ingestBanks';
 export { ingestMedical } from './ingestMedical';
 export { newsLookup } from './newsLookup';
 export { enrichNews } from './enrichNews';
+export { setLeadAdvertiser } from './setLeadAdvertiser';
 export { enrichLicense, enrichNewEstablishment, enrichGooglePlacesForEstablishment, runGooglePlacesJob } from './enrich';
 export { enrichComptrollerRevenue } from './enrichComptroller';
 export { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';
