@@ -182,6 +182,25 @@ export default function LeadDetail({
   const [rwBusy, setRwBusy] = useState(false);
   const [rwAccounts, setRwAccounts] = useState<RwAccount[] | null>(null);
   const [rwError, setRwError] = useState<string | null>(null);
+  const [newsBusy, setNewsBusy] = useState(false);
+  const [newsItems, setNewsItems] = useState<{ title: string; source: string; link: string; date: string | null }[] | null>(null);
+  const [newsError, setNewsError] = useState<string | null>(null);
+
+  const handleNews = async () => {
+    setNewsBusy(true);
+    setNewsError(null);
+    setNewsItems(null);
+    try {
+      const fn = httpsCallable(getFunctions(), "newsLookup");
+      const res = await fn({ businessName: lead.businessName, city: lead.city ?? "" });
+      const d = res.data as { items?: { title: string; source: string; link: string; date: string | null }[] };
+      setNewsItems(d.items ?? []);
+    } catch (err: any) {
+      setNewsError(err?.message ?? "News lookup failed");
+    } finally {
+      setNewsBusy(false);
+    }
+  };
 
   const handleRadioWorkflow = async () => {
     setRwBusy(true);
@@ -324,11 +343,16 @@ export default function LeadDetail({
         {(() => {
           const q = [lead.businessName, lead.address, lead.city].filter(Boolean).join(" ");
           const eq = encodeURIComponent(q);
+          const nameCity = encodeURIComponent([lead.businessName, lead.city].filter(Boolean).join(" "));
+          const justName = encodeURIComponent(lead.businessName ?? "");
           const links = [
             { label: "Google", href: `https://www.google.com/search?q=${eq}` },
             { label: "Maps", href: `https://www.google.com/maps/search/?api=1&query=${eq}` },
             { label: "News", href: `https://www.google.com/search?q=${eq}&tbm=nws` },
-            { label: "Facebook", href: `https://www.facebook.com/search/top?q=${encodeURIComponent([lead.businessName, lead.city].filter(Boolean).join(" "))}` },
+            { label: "Facebook", href: `https://www.facebook.com/search/top?q=${nameCity}` },
+            // "Already advertising?" — public ad transparency, the free media-spend check.
+            { label: "Meta ads", href: `https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=US&q=${justName}&search_type=keyword_unordered&media_type=all` },
+            { label: "Google ads", href: `https://adstransparency.google.com/?region=US&query=${justName}` },
           ];
           return (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -352,9 +376,42 @@ export default function LeadDetail({
               >
                 {rwBusy ? "Checking…" : "RadioWorkflow"}
               </button>
+              <button
+                onClick={handleNews}
+                disabled={newsBusy}
+                className="inline-flex items-center rounded-full border border-violet-400 px-2.5 py-0.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-500 hover:text-white transition disabled:opacity-40"
+                title="Recent news coverage (last 6 months) — a promotion/expansion moment to call on"
+              >
+                {newsBusy ? "Searching…" : "Press / News"}
+              </button>
             </div>
           );
         })()}
+
+        {/* Recent press — Google News coverage in the last ~6 months. */}
+        {(newsError || newsItems) && (
+          <div className="mt-2 rounded-2xl border border-violet-200 bg-violet-50/60 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-700">Recent press</p>
+            {newsError ? (
+              <p className="mt-1 text-xs text-amber-700">{newsError}</p>
+            ) : (newsItems ?? []).length === 0 ? (
+              <p className="mt-1 text-xs text-slate-600">No recent news coverage found.</p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {(newsItems ?? []).map((n, i) => (
+                  <li key={i} className="text-xs">
+                    <a href={n.link} target="_blank" rel="noopener noreferrer" className="font-medium text-violet-800 hover:underline">
+                      {n.title}
+                    </a>
+                    <span className="text-slate-500">
+                      {" "}· {n.source}{n.date ? ` · ${new Date(n.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         {/* RadioWorkflow lookup result — is this account already in the station CRM? */}
         {(rwError || rwAccounts) && (

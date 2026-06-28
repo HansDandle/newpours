@@ -8,6 +8,7 @@ export { enrichLeadPlaces, enrichLeadPlacesLead } from './enrichLeadPlaces';
 export { ingestAttorneys } from './ingestAttorneys';
 export { ingestBanks } from './ingestBanks';
 export { ingestMedical } from './ingestMedical';
+export { newsLookup } from './newsLookup';
 export { enrichLicense, enrichNewEstablishment, enrichGooglePlacesForEstablishment, runGooglePlacesJob } from './enrich';
 export { enrichComptrollerRevenue } from './enrichComptroller';
 export { enrichHealthInspectionForEstablishment, runHealthInspectionsJob } from './enrichHealthInspections';
