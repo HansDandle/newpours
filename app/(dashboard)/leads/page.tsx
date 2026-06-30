@@ -11,6 +11,7 @@ import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { Lead, LeadSourceType, LeadSignal } from "@/types";
 
 const LEADS_CACHE_KEY = "newpours.leads.cache.v2";
+const EXPORT_LIST_KEY = "newpours.leads.exportlist.v1"; // hand-picked leads to export
 // localStorage (survives reloads/new tabs) + a longer TTL — the leads list is a
 // full-collection read, so caching it hard keeps Firestore reads way down.
 const LEADS_CACHE_TTL = 30 * 60 * 1000;
@@ -92,6 +93,19 @@ export default function LeadsPage() {
   const [mobileOpen, setMobileOpen] = useState(false); // detail drawer on small screens
   const [dataAsOf, setDataAsOf] = useState<number | null>(null);
   const [dataLive, setDataLive] = useState(false);
+  const [exportIds, setExportIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try { const raw = localStorage.getItem(EXPORT_LIST_KEY); if (raw) setExportIds(new Set(JSON.parse(raw))); } catch {}
+  }, []);
+  const persistExport = (s: Set<string>) => { try { localStorage.setItem(EXPORT_LIST_KEY, JSON.stringify([...s])); } catch {} };
+  const toggleExport = (id: string) => setExportIds((prev) => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    persistExport(n);
+    return n;
+  });
+  const clearExportList = () => { setExportIds(new Set()); persistExport(new Set()); };
   const [operators, setOperators] = useState<OperatorDef[]>([]);
 
   useEffect(() => {
@@ -249,7 +263,7 @@ export default function LeadsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleRadioWorkflowExport = () => {
+  const handleRadioWorkflowExport = (leadsToExport: LeadRow[] = filtered, filename = "leads-radio-workflow.csv") => {
     const RW_HEADERS = [
       "Company ID", "Account Name", "Account Manager", "Type", "EDI #",
       "Website", "General Phone", "General Cell/Mobile", "General Fax", "General Email",
@@ -260,7 +274,7 @@ export default function LeadsPage() {
       "Contact - Full Name", "Contact - First Name", "Contact - Surname",
       "Office Phone", "Mobile/Cell", "Other Phone", "Fax Number", "Email Address", "Position",
     ];
-    const lines = filtered.map((r) => {
+    const lines = leadsToExport.map((r) => {
       const phone = r.phones?.[0] ?? "";
       const email = r.emails?.[0] ?? "";
       const hasOwner = Boolean(r.ownerName);
@@ -305,9 +319,14 @@ export default function LeadsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "leads-radio-workflow.csv";
+    a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const exportPickList = () => {
+    const picked = rows.filter((r) => exportIds.has(r.id));
+    if (picked.length) handleRadioWorkflowExport(picked, "radio-workflow-list.csv");
   };
 
   if (!fullAccess) return <UpgradeGate feature="Leads & CRM" />;
@@ -379,7 +398,7 @@ export default function LeadsPage() {
             ))}
           </select>
           <button onClick={handleExport} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export CSV</button>
-          <button onClick={handleRadioWorkflowExport} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]">Export for Radio Workflow</button>
+          <button onClick={() => handleRadioWorkflowExport()} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]" title="Export all currently-filtered leads in RadioWorkflow format">Export filtered → RW</button>
           <button onClick={() => { setSearch(""); setCounties([]); setCategories([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); setCampaign(""); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
           <button onClick={() => { try { localStorage.removeItem(LEADS_CACHE_KEY); } catch {} loadLive(); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400" title="Pull the latest leads live from the server (otherwise loaded from a cached snapshot to save reads)">↻ Refresh</button>
           <span className="ml-auto text-sm text-slate-500">
@@ -388,6 +407,15 @@ export default function LeadsPage() {
             {dataAsOf ? <span className="ml-1 text-xs text-slate-400">· {dataLive ? "live" : fmtAgo(dataAsOf)}</span> : null}
           </span>
         </div>
+
+        {exportIds.size > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-2xl border border-[rgba(200,169,108,0.4)] bg-[rgba(200,169,108,0.08)] px-4 py-2">
+            <span className="text-sm font-semibold text-slate-700">★ Export list: {exportIds.size}</span>
+            <button onClick={exportPickList} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export list → RadioWorkflow</button>
+            <button onClick={clearExportList} className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-slate-400">Clear list</button>
+            <span className="text-xs text-slate-500">Pick leads with the ☆ button on any row; the list persists across sessions.</span>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -418,6 +446,13 @@ export default function LeadsPage() {
                           <p className="font-semibold text-slate-900">{r.businessName}</p>
                           <p className="text-xs text-slate-500">{r.ownerName || (r.phones?.[0] ?? "No contact")}</p>
                           <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleExport(r.id); }}
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${exportIds.has(r.id) ? "bg-[var(--brand-accent)] text-white" : "border border-slate-300 text-slate-500 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]"}`}
+                              title={exportIds.has(r.id) ? "Remove from export list" : "Add to export list"}
+                            >
+                              {exportIds.has(r.id) ? "★ Listed" : "☆ List"}
+                            </button>
                             <p className="text-xs text-slate-400">{(r.sources ?? []).map((s) => s.type).join(", ")}</p>
                             {r.operator && (
                               <button
