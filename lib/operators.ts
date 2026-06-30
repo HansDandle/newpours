@@ -26,6 +26,13 @@ function norm(value?: string): string {
 
 const refOf = (op: OperatorDef): OperatorRef => ({ key: op.id ?? norm(op.name).replace(/ /g, "-"), name: op.name });
 
+/** Whole-word/phrase match — prevents "ELM" from matching "St. Elmo" (substring). */
+function wordMatch(haystack: string, pattern: string): boolean {
+  const p = norm(pattern);
+  if (!p) return false;
+  return new RegExp(`(^| )${p}( |$)`).test(haystack);
+}
+
 export function resolveOperator(
   rec: { owner?: string; mailAddress?: string; businessName?: string },
   operators: OperatorDef[]
@@ -34,9 +41,9 @@ export function resolveOperator(
   const mail = norm(rec.mailAddress);
   const name = norm(rec.businessName);
   for (const op of operators) {
-    if ((op.mailPatterns ?? []).some((m) => m && mail.includes(norm(m)))) return refOf(op);
-    if ((op.ownerPatterns ?? []).some((o) => o && owner.includes(norm(o)))) return refOf(op);
-    if ((op.aliases ?? []).some((a) => a && (owner.includes(norm(a)) || name.includes(norm(a))))) return refOf(op);
+    if ((op.mailPatterns ?? []).some((m) => m && wordMatch(mail, m))) return refOf(op);
+    if ((op.ownerPatterns ?? []).some((o) => o && wordMatch(owner, o))) return refOf(op);
+    if ((op.aliases ?? []).some((a) => a && (wordMatch(owner, a) || wordMatch(name, a)))) return refOf(op);
   }
   return null;
 }

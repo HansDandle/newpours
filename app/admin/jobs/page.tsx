@@ -19,6 +19,8 @@ const JOBS = [
   { key: "recategorize", label: "Recategorize Leads" },
   { key: "recompute_fit", label: "Recompute Campaign Fit" },
   { key: "news_enrich", label: "Press/News Enrichment" },
+  { key: "leads_snapshot", label: "Rebuild Leads Snapshot" },
+  { key: "prune_out_of_area", label: "Prune Out-of-Area Leads (9 counties)" },
   { key: "lead_places", label: "Lead Website/Phone (Google)" },
   { key: "apollo_enrich", label: "Apollo Contact Enrichment" },
   { key: "dedup_pending", label: "Clean Up Stale Pending" },

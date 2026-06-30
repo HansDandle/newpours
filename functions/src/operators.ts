@@ -25,6 +25,17 @@ function norm(value?: string): string {
   return String(value ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Whole-word / phrase match on word boundaries. Prevents false positives like an
+ * "ELM" pattern matching "St. Elmo" (substring) — it must match the word "elm".
+ * `haystack` is already normalized; `pattern` is normalized here.
+ */
+function wordMatch(haystack: string, pattern: string): boolean {
+  const p = norm(pattern);
+  if (!p) return false;
+  return new RegExp(`(^| )${p}( |$)`).test(haystack); // p has no regex metachars after norm
+}
+
 /** Resolve a record's parent operator from owner / mailing address / business name. */
 export function resolveOperator(
   rec: { owner?: string; mailAddress?: string; businessName?: string },
@@ -35,9 +46,9 @@ export function resolveOperator(
   const name = norm(rec.businessName);
   for (const op of operators) {
     const ref = { key: op.id ?? norm(op.name).replace(/ /g, '-'), name: op.name };
-    if ((op.mailPatterns ?? []).some((m) => m && mail.includes(norm(m)))) return ref;
-    if ((op.ownerPatterns ?? []).some((o) => o && owner.includes(norm(o)))) return ref;
-    if ((op.aliases ?? []).some((a) => a && (owner.includes(norm(a)) || name.includes(norm(a))))) return ref;
+    if ((op.mailPatterns ?? []).some((m) => m && wordMatch(mail, m))) return ref;
+    if ((op.ownerPatterns ?? []).some((o) => o && wordMatch(owner, o))) return ref;
+    if ((op.aliases ?? []).some((a) => a && (wordMatch(owner, a) || wordMatch(name, a)))) return ref;
   }
   return null;
 }

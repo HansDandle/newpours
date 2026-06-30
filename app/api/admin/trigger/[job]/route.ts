@@ -19,6 +19,8 @@ const VALID_JOBS = [
   "recategorize",
   "recompute_fit",
   "news_enrich",
+  "leads_snapshot",
+  "prune_out_of_area",
   "lead_places",
   "apollo_enrich",
   "dedup_pending",

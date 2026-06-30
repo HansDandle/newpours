@@ -22,6 +22,7 @@ import { runBanksJob } from './ingestBanks';
 import { runMedicalJob } from './ingestMedical';
 import { runHomeServicesJob } from './ingestHomeServices';
 import { runFoodDrinkJob } from './ingestFoodDrink';
+import { runGenerateLeadsSnapshot } from './leadsSnapshot';
 import { runNewsJob } from './enrichNews';
 import { computeCampaignFit } from './campaignFit';
 import { computeCategory } from './categorize';
@@ -446,6 +447,35 @@ export const processAdminTrigger = onDocumentCreated(
         const result = await runNewsJob({ limit: 500 });
         processed = result.processed;
         notes = `Press/news enrichment: processed=${result.processed}, withNews=${result.withNews}`;
+      } else if (jobName === 'leads_snapshot') {
+        const result = await runGenerateLeadsSnapshot();
+        processed = result.count;
+        notes = `Leads snapshot written: ${result.count} leads, ${result.sizeBytes} bytes gzipped`;
+      } else if (jobName === 'prune_out_of_area') {
+        // Keep only leads in the Sun Radio coverage counties. Preserves anything
+        // already worked (stage moved off "new") or tagged to an operator group.
+        const COVERAGE = new Set([
+          'travis', 'hays', 'williamson', 'bastrop', 'caldwell', 'blanco', 'burnet', 'llano', 'gillespie',
+        ]);
+        const leadsSnap = await db.collection('leads').get();
+        let removed = 0;
+        let keptWorked = 0;
+        let batch = db.batch();
+        let ops = 0;
+        for (const leadDoc of leadsSnap.docs) {
+          const d = leadDoc.data();
+          const county = String(d.county ?? '').trim().toLowerCase();
+          if (!county || COVERAGE.has(county)) continue; // in-area or unknown -> keep
+          const worked = (d.crm?.stage ?? 'new') !== 'new';
+          const grouped = !!d.operator;
+          if (worked || grouped) { keptWorked++; continue; }
+          batch.delete(leadDoc.ref);
+          removed++;
+          if (++ops >= 400) { await batch.commit(); batch = db.batch(); ops = 0; }
+        }
+        if (ops > 0) await batch.commit();
+        processed = removed;
+        notes = `Prune out-of-area: removed=${removed}, keptWorked/grouped=${keptWorked}, scanned=${leadsSnap.size}. Coverage = ${Array.from(COVERAGE).join('/')}.`;
       } else if (jobName === 'recompute_fit') {
         const leadsSnap = await db.collection('leads').get();
         let changed = 0;
@@ -603,6 +633,21 @@ export const processAdminTrigger = onDocumentCreated(
         finalStatus = 'partial';
         notes = `Admin trigger job '${jobName}' acknowledged but not implemented in processAdminTrigger yet.`;
         console.log(notes);
+      }
+
+      // Refresh the leads snapshot after any job that changed leads, so the
+      // Leads page reflects them without waiting for the 12h scheduled refresh.
+      const LEAD_MUTATING = new Set([
+        'tabc_ingest', 'tabs_ingest', 'multifamily_ingest', 'multifamily_pm', 'nonprofit_ingest',
+        'attorney_ingest', 'bank_ingest', 'medical_ingest', 'home_services_ingest', 'food_drink_ingest',
+        'recategorize', 'recompute_fit', 'retag_operators', 'news_enrich', 'prune_out_of_area',
+      ]);
+      if (finalStatus === 'success' && LEAD_MUTATING.has(jobName)) {
+        try {
+          await runGenerateLeadsSnapshot();
+        } catch (e) {
+          console.error('Post-job leads snapshot refresh failed:', e);
+        }
       }
 
       await snap.ref.update({

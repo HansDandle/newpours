@@ -10,10 +10,25 @@ import { matchOperatorQuery, loadOperators, type OperatorDef } from "@/lib/opera
 import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { Lead, LeadSourceType, LeadSignal } from "@/types";
 
-const LEADS_CACHE_KEY = "newpours.leads.cache.v1";
+const LEADS_CACHE_KEY = "newpours.leads.cache.v2";
 // localStorage (survives reloads/new tabs) + a longer TTL — the leads list is a
 // full-collection read, so caching it hard keeps Firestore reads way down.
 const LEADS_CACHE_TTL = 30 * 60 * 1000;
+// The leads list normally loads from a gzipped Storage snapshot (0 Firestore
+// reads). If that's missing or older than this, the client falls back to a live
+// read — so a broken refresh costs reads, never stale leads.
+const SNAPSHOT_URL = `https://storage.googleapis.com/${process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}/cache/leads-summary.json.gz`;
+const SNAPSHOT_STALE_MS = 26 * 60 * 60 * 1000;
+
+function fmtAgo(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 90) return "just now";
+  const m = Math.round(s / 60);
+  if (m < 90) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 36) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
 
 const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "tabs_permit", label: "Construction permit (TABS)" },
@@ -75,11 +90,45 @@ export default function LeadsPage() {
   const [campaign, setCampaign] = useState<"" | "underwriting" | "naming" | "football">("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false); // detail drawer on small screens
+  const [dataAsOf, setDataAsOf] = useState<number | null>(null);
+  const [dataLive, setDataLive] = useState(false);
   const [operators, setOperators] = useState<OperatorDef[]>([]);
 
   useEffect(() => {
     loadOperators().then(setOperators).catch(() => {});
   }, []);
+
+  const applyRows = (data: LeadRow[], asOf: number, live: boolean) => {
+    setRows(data);
+    setDataAsOf(asOf);
+    setDataLive(live);
+    try { localStorage.setItem(LEADS_CACHE_KEY, JSON.stringify({ t: Date.now(), data, asOf, live })); } catch {}
+  };
+
+  // Live read of the whole collection — the fail-safe and the "↻ Refresh" path.
+  const loadLive = () => {
+    setLoading(true);
+    return getDocs(collection(db, "leads"))
+      .then((snap) => applyRows(snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeadRow)), Date.now(), true))
+      .finally(() => setLoading(false));
+  };
+
+  // Default path: the Storage snapshot (0 Firestore reads). Falls back to a live
+  // read if the snapshot is missing, malformed, or stale.
+  const loadSnapshot = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(SNAPSHOT_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error("no snapshot");
+      const json = await res.json();
+      const gen = Number(json?.generatedAt ?? 0);
+      if (!Array.isArray(json?.leads) || !gen || Date.now() - gen > SNAPSHOT_STALE_MS) throw new Error("stale");
+      applyRows(json.leads as LeadRow[], gen, false);
+      setLoading(false);
+    } catch {
+      await loadLive(); // fail-safe — never show stale leads
+    }
+  };
 
   useEffect(() => {
     if (authLoading) return;
@@ -87,21 +136,18 @@ export default function LeadsPage() {
     try {
       const raw = localStorage.getItem(LEADS_CACHE_KEY);
       if (raw) {
-        const { t, data } = JSON.parse(raw) as { t: number; data: LeadRow[] };
-        if (Date.now() - t <= LEADS_CACHE_TTL) {
-          setRows(data);
+        const c = JSON.parse(raw) as { t: number; data: LeadRow[]; asOf?: number; live?: boolean };
+        if (Date.now() - c.t <= LEADS_CACHE_TTL) {
+          setRows(c.data);
+          setDataAsOf(c.asOf ?? c.t);
+          setDataLive(!!c.live);
           setLoading(false);
           return;
         }
       }
     } catch {}
-    getDocs(collection(db, "leads"))
-      .then((snap) => {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeadRow));
-        try { localStorage.setItem(LEADS_CACHE_KEY, JSON.stringify({ t: Date.now(), data })); } catch {}
-        setRows(data);
-      })
-      .finally(() => setLoading(false));
+    loadSnapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, fullAccess]);
 
   const countyOptions = useMemo(
@@ -335,10 +381,11 @@ export default function LeadsPage() {
           <button onClick={handleExport} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export CSV</button>
           <button onClick={handleRadioWorkflowExport} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]">Export for Radio Workflow</button>
           <button onClick={() => { setSearch(""); setCounties([]); setCategories([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); setCampaign(""); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
-          <button onClick={() => { try { localStorage.removeItem(LEADS_CACHE_KEY); } catch {} window.location.reload(); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400" title="Reload the latest leads from the server (otherwise cached up to 30 min to save reads)">↻ Refresh</button>
+          <button onClick={() => { try { localStorage.removeItem(LEADS_CACHE_KEY); } catch {} loadLive(); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400" title="Pull the latest leads live from the server (otherwise loaded from a cached snapshot to save reads)">↻ Refresh</button>
           <span className="ml-auto text-sm text-slate-500">
             {campaign ? <span className="mr-1 font-semibold text-[var(--brand-accent)]">Ranked by fit ·</span> : null}
             {filtered.length.toLocaleString()} of {rows.length.toLocaleString()} leads
+            {dataAsOf ? <span className="ml-1 text-xs text-slate-400">· {dataLive ? "live" : fmtAgo(dataAsOf)}</span> : null}
           </span>
         </div>
       </div>
@@ -416,8 +463,8 @@ export default function LeadsPage() {
             {filtered.length > 300 ? <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">Showing first 300. Refine filters to narrow the list.</p> : null}
           </div>
 
-          {/* Desktop side detail */}
-          <div className="hidden xl:block rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          {/* Desktop side detail — sticky so it follows you as you scroll the list */}
+          <div className="hidden xl:block sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             {selected ? (
               <LeadDetail lead={selected} uid={user?.uid} isAdmin={isAdmin} onOperatorClick={(name) => setSearch(name)} />
             ) : (
