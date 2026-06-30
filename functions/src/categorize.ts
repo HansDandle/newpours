@@ -18,6 +18,7 @@ export const LEAD_CATEGORIES = [
   'Legal',
   'Financial',
   'Home Services',
+  'Government/Institutional',
   'Other',
 ] as const;
 
@@ -47,10 +48,18 @@ interface CategorizeInput {
   sources?: Array<{ type?: string; raw?: Record<string, any>; licenseType?: string }>;
 }
 
+// Government / institutional entities — not ad prospects. Their construction
+// permits (e.g. a state facility's "Replacement Kitchen Building") otherwise
+// false-match Food & Drink keywords and pollute the underwriting list.
+const INSTITUTIONAL = /\b(sslc|state supported living|state of texas|txdot|tx dot|city of|county of|independent school dist|isd|housing authority|state hospital|state school|correctional|detention|sheriff|county jail|department of|river authority|municipal|water control|university of texas|\bva\b|veterans affairs)\b/i;
+
 /** Resolve a lead's single primary marketing category. */
 export function computeCategory(input: CategorizeInput): LeadCategory {
   const sources = input.sources ?? [];
   const hasType = (t: string) => sources.some((s) => s.type === t);
+
+  // Government / institutional — checked first so its permits don't get mislabeled.
+  if (INSTITUTIONAL.test(input.businessName ?? '')) return 'Government/Institutional';
 
   // Nonprofit: NTEE drives the bucket; fall back to a generic Nonprofit bucket.
   if (hasType('nonprofit_990')) {

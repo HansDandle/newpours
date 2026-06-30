@@ -24,27 +24,9 @@ if (!admin.apps.length) admin.initializeApp();
 const MIN_REVIEWS = 100; // proxy for "advertises a lot" — heavy advertisers accrue lots of reviews
 const MAX_LEADS = 500;
 
-// Coverage cities -> county. Mirrors the nonprofit ingest's coverage counties
-// (Travis, Williamson, Bastrop, Caldwell, Hays, Blanco, Burnet, Gillespie).
-const CITY_COUNTY: Record<string, string> = {
-  'Austin': 'Travis',
-  'Pflugerville': 'Travis',
-  'Lakeway': 'Travis',
-  'Bee Cave': 'Travis',
-  'Round Rock': 'Williamson',
-  'Cedar Park': 'Williamson',
-  'Georgetown': 'Williamson',
-  'Leander': 'Williamson',
-  'Kyle': 'Hays',
-  'Buda': 'Hays',
-  'San Marcos': 'Hays',
-  'Dripping Springs': 'Hays',
-  'Bastrop': 'Bastrop',
-  'Lockhart': 'Caldwell',
-  'Marble Falls': 'Burnet',
-  'Fredericksburg': 'Gillespie',
-  'Johnson City': 'Blanco',
-};
+// County-wide coverage (all towns across the 9 counties) — shared with the other
+// discovery ingests. The football broadcast-city list is separate (footprint only).
+import { COVERAGE_CITY_COUNTY as CITY_COUNTY } from './coverageCities';
 
 // Practice areas whose firms advertise the most heavily.
 const PRACTICE_QUERIES = [

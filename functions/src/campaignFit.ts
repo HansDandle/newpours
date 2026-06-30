@@ -34,6 +34,17 @@ const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 // Categories whose businesses typically sponsor community / small-town sports.
 const COMMUNITY_CATEGORIES = new Set(['Financial', 'Medical', 'Legal', 'Retail & Services', 'Housing', 'Home Services']);
 
+/** Google review count for a lead (popularity / established-ness proxy). */
+function reviewCount(input: FitInput): number {
+  const fromEnrich = Number(input.enrichment?.googlePlaces?.reviewCount ?? 0);
+  let fromSrc = 0;
+  for (const s of input.sources ?? []) {
+    const rc = Number((s.raw as any)?.reviews ?? 0);
+    if (Number.isFinite(rc) && rc > fromSrc) fromSrc = rc;
+  }
+  return Math.max(fromEnrich || 0, fromSrc);
+}
+
 /** Largest dollar figure we know about a lead — revenue, buildout cost, 990 revenue. */
 function wealthProxy(input: FitInput): number {
   let max = 0;
@@ -47,11 +58,15 @@ function wealthProxy(input: FitInput): number {
 }
 
 export function computeCampaignFit(input: FitInput): CampaignFit {
+  // Government / institutional entities aren't ad prospects — zero on every sell.
+  if (input.category === 'Government/Institutional') return { underwriting: 0, naming: 0, football: 0 };
+
   const signals = new Set(input.signals ?? []);
   const sources = input.sources ?? [];
   const hasType = (t: string) => sources.some((s) => s.type === t);
   const footprint = Number(input.footprintCount ?? 0);
   const money = wealthProxy(input);
+  const reviews = reviewCount(input);
 
   // ── Football: driven by broadcast footprint, with a small floor for the kinds of
   // regional advertisers that sponsor local sports even before we know their map. ──
@@ -85,6 +100,13 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
   if (signals.has('heavy_advertiser')) naming += 12; // proven ad budget
   if (signals.has('in_the_news')) naming += 8; // prominent / visible in the community
   if (signals.has('active_advertiser')) naming += 15; // proven they spend on advertising
+
+  // ── Review count: a popularity/established-ness dimension (esp. for verticals
+  // like home services where we otherwise have little to go on). ──
+  if (reviews >= 3000) { underwriting += 15; naming += 12; football += 5; }
+  else if (reviews >= 1000) { underwriting += 10; naming += 6; football += 3; }
+  else if (reviews >= 500) { underwriting += 6; naming += 3; }
+  else if (reviews >= 250) { underwriting += 3; }
 
   return { underwriting: clamp(underwriting), naming: clamp(naming), football: clamp(football) };
 }

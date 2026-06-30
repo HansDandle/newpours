@@ -26,14 +26,8 @@ if (!admin.apps.length) admin.initializeApp();
 const MIN_REVIEWS = 500; // proxy for an established, advertising facility (tuned down the small-practice tail)
 const MAX_LEADS = 2000;
 
-// Coverage cities -> county (the core 8-county market).
-const CITY_COUNTY: Record<string, string> = {
-  'Austin': 'Travis', 'Pflugerville': 'Travis', 'Lakeway': 'Travis', 'Bee Cave': 'Travis',
-  'Round Rock': 'Williamson', 'Cedar Park': 'Williamson', 'Georgetown': 'Williamson', 'Leander': 'Williamson',
-  'Kyle': 'Hays', 'Buda': 'Hays', 'San Marcos': 'Hays', 'Dripping Springs': 'Hays',
-  'Bastrop': 'Bastrop', 'Lockhart': 'Caldwell', 'Marble Falls': 'Burnet',
-  'Fredericksburg': 'Gillespie', 'Johnson City': 'Blanco',
-};
+// County-wide coverage across the 9 counties (shared with the other discovery ingests).
+import { COVERAGE_CITY_COUNTY as CITY_COUNTY } from './coverageCities';
 
 // Practice areas worth calling — the original four plus the widened set.
 const MEDICAL_QUERIES = [
