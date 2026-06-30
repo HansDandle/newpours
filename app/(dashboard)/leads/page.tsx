@@ -11,7 +11,9 @@ import UpgradeGate from "@/components/shared/UpgradeGate";
 import type { Lead, LeadSourceType, LeadSignal } from "@/types";
 
 const LEADS_CACHE_KEY = "newpours.leads.cache.v1";
-const LEADS_CACHE_TTL = 5 * 60 * 1000;
+// localStorage (survives reloads/new tabs) + a longer TTL — the leads list is a
+// full-collection read, so caching it hard keeps Firestore reads way down.
+const LEADS_CACHE_TTL = 30 * 60 * 1000;
 
 const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "tabs_permit", label: "Construction permit (TABS)" },
@@ -83,7 +85,7 @@ export default function LeadsPage() {
     if (authLoading) return;
     if (!fullAccess) { setLoading(false); return; } // Leads/CRM is Pro-only
     try {
-      const raw = sessionStorage.getItem(LEADS_CACHE_KEY);
+      const raw = localStorage.getItem(LEADS_CACHE_KEY);
       if (raw) {
         const { t, data } = JSON.parse(raw) as { t: number; data: LeadRow[] };
         if (Date.now() - t <= LEADS_CACHE_TTL) {
@@ -96,7 +98,7 @@ export default function LeadsPage() {
     getDocs(collection(db, "leads"))
       .then((snap) => {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as LeadRow));
-        try { sessionStorage.setItem(LEADS_CACHE_KEY, JSON.stringify({ t: Date.now(), data })); } catch {}
+        try { localStorage.setItem(LEADS_CACHE_KEY, JSON.stringify({ t: Date.now(), data })); } catch {}
         setRows(data);
       })
       .finally(() => setLoading(false));
@@ -333,6 +335,7 @@ export default function LeadsPage() {
           <button onClick={handleExport} className="rounded-full btn-accent px-4 py-1.5 text-xs font-semibold">Export CSV</button>
           <button onClick={handleRadioWorkflowExport} className="rounded-full border border-slate-300 bg-white px-4 py-1.5 text-xs font-semibold text-slate-700 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]">Export for Radio Workflow</button>
           <button onClick={() => { setSearch(""); setCounties([]); setCategories([]); setSources([]); setSignals([]); setStage(""); setSortKey("newest"); setCampaign(""); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400">Reset</button>
+          <button onClick={() => { try { localStorage.removeItem(LEADS_CACHE_KEY); } catch {} window.location.reload(); }} className="rounded-full border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-400" title="Reload the latest leads from the server (otherwise cached up to 30 min to save reads)">↻ Refresh</button>
           <span className="ml-auto text-sm text-slate-500">
             {campaign ? <span className="mr-1 font-semibold text-[var(--brand-accent)]">Ranked by fit ·</span> : null}
             {filtered.length.toLocaleString()} of {rows.length.toLocaleString()} leads
