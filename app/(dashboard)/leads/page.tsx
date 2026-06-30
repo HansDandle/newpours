@@ -21,6 +21,7 @@ const SOURCE_OPTIONS: { value: LeadSourceType; label: string }[] = [
   { value: "bank_branch", label: "Bank / credit union (branches)" },
   { value: "medical_npi", label: "Medical facility" },
   { value: "home_services", label: "Home services" },
+  { value: "food_drink", label: "Restaurant / bar (established)" },
   { value: "tabc", label: "TABC license" },
   { value: "tabc_event", label: "TABC event permit" },
   { value: "event", label: "Event permit" },

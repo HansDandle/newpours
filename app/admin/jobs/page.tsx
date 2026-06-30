@@ -15,6 +15,7 @@ const JOBS = [
   { key: "bank_ingest", label: "Bank/Branch Ingest (FDIC)" },
   { key: "medical_ingest", label: "Medical Ingest (Google 100+ reviews)" },
   { key: "home_services_ingest", label: "Home Services Ingest (Google 250+ reviews)" },
+  { key: "food_drink_ingest", label: "Food & Drink Discovery + TABC Cleanup (200+)" },
   { key: "recategorize", label: "Recategorize Leads" },
   { key: "recompute_fit", label: "Recompute Campaign Fit" },
   { key: "news_enrich", label: "Press/News Enrichment" },

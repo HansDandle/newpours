@@ -73,6 +73,9 @@ export function computeCategory(input: CategorizeInput): LeadCategory {
   // Home-services company (pest control, HVAC, roofing, …).
   if (hasType('home_services')) return 'Home Services';
 
+  // Restaurant/bar discovered via Google Places.
+  if (hasType('food_drink')) return 'Food & Drink';
+
   // Keyword match across the name + permit descriptions + license type.
   const parts: string[] = [input.businessName ?? ''];
   for (const s of sources) {

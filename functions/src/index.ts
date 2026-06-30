@@ -9,6 +9,7 @@ export { ingestAttorneys } from './ingestAttorneys';
 export { ingestBanks } from './ingestBanks';
 export { ingestMedical } from './ingestMedical';
 export { ingestHomeServices } from './ingestHomeServices';
+export { ingestFoodDrink } from './ingestFoodDrink';
 export { newsLookup } from './newsLookup';
 export { enrichNews } from './enrichNews';
 export { setLeadAdvertiser } from './setLeadAdvertiser';
