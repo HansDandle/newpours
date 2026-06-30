@@ -214,12 +214,16 @@ export interface Lead {
   phones?: string[];
   emails?: string[];
   website?: string;
+  /** Manually-designated contact for RadioWorkflow export (name, phone, email, role). */
+  primaryContact?: { name?: string; phone?: string; email?: string; role?: string };
   sources: LeadSource[];
   signals: LeadSignal[];
   /** Primary marketing category (Food & Drink, Medical, Nonprofit, …) for campaign segmentation. */
   category?: string;
   /** Broadcast cities (of Sun Radio's HS-football footprint) this business operates in. */
   footprintCities?: string[];
+  /** Counties spanned by footprint branches — used to match county filters for multi-location banks. */
+  footprintCounties?: string[];
   /** Count of broadcast cities covered — denormalized for sorting the football campaign. */
   footprintCount?: number;
   /** Per-campaign fit scores (0–100). See CampaignFit. */

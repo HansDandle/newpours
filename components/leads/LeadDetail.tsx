@@ -10,6 +10,7 @@ import {
   logActivity,
   setFollowUp,
   addContact,
+  setPrimaryContact,
   setOperator,
   clearOperatorLock,
 } from "@/lib/crm";
@@ -500,7 +501,13 @@ export default function LeadDetail({
                 {(rwAccounts ?? []).slice(0, 5).map((a) => (
                   <div key={String(a.id)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-900">{a.name || "(unnamed)"}</span>
+                      {a.url ? (
+                        <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-700 hover:underline">
+                          {a.name || "(unnamed)"} ↗
+                        </a>
+                      ) : (
+                        <span className="font-semibold text-slate-900">{a.name || "(unnamed)"}</span>
+                      )}
                       {a.owner && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">owned by {a.owner}</span>}
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${a.prospect ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                         {a.prospect ? "Prospect" : "Client"}
@@ -663,16 +670,39 @@ export default function LeadDetail({
           {contacts.length === 0 ? (
             <p className="text-sm text-slate-400">No contacts yet.</p>
           ) : (
-            contacts.map((c, i) => (
-              <div key={c.id ?? i} className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">
-                  {c.name || "Unnamed"} <span className="text-slate-400">· {c.role}</span>
-                </span>
-                <span className="text-slate-600">
-                  {c.phone ? <a href={`tel:${c.phone}`} className="text-blue-600 hover:underline">{c.phone}</a> : c.email || "--"}
-                </span>
-              </div>
-            ))
+            contacts.map((c, i) => {
+              const isPrimary = lead.primaryContact?.name && c.name && lead.primaryContact.name === c.name && lead.primaryContact.phone === (c.phone ?? null);
+              return (
+                <div key={c.id ?? i} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium text-slate-800">
+                      {c.name || "Unnamed"}
+                      <span className="ml-1.5 text-xs font-normal text-slate-400">{c.role}</span>
+                      {isPrimary && (
+                        <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">export</span>
+                      )}
+                    </span>
+                    {isAdmin && !isPrimary && c.name && (
+                      <button
+                        onClick={async () => {
+                          await setPrimaryContact(lead.id, { name: c.name, phone: c.phone, email: c.email, role: c.role });
+                          lead.primaryContact = { name: c.name, phone: c.phone, email: c.email, role: c.role };
+                          setContacts((prev) => [...prev]); // re-render
+                        }}
+                        className="text-[10px] font-semibold text-slate-400 hover:text-emerald-600"
+                      >
+                        Set as export
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-slate-500">
+                    {c.phone ? <a href={`tel:${c.phone}`} className="text-blue-600 hover:underline">{c.phone}</a> : null}
+                    {c.phone && c.email ? " · " : null}
+                    {c.email || (!c.phone ? "No contact info" : null)}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>

@@ -8,6 +8,7 @@ import {
   collection,
   doc,
   addDoc,
+  setDoc,
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore";
@@ -97,12 +98,47 @@ export async function clearOperatorLock(leadId: string) {
 }
 
 export async function addContact(leadId: string, contact: LeadContact) {
-  await addDoc(collection(db, "leads", leadId, "contacts"), {
-    name: contact.name ?? null,
+  const phone = String(contact.phone ?? "").trim();
+  const email = String(contact.email ?? "").trim();
+  const name = String(contact.name ?? "").trim();
+
+  // Subcollection entry — full record with timestamps.
+  const contactId = phone
+    ? `phone_${phone.replace(/[^0-9]/g, "")}`
+    : email
+    ? `email_${email.toLowerCase().replace(/[^a-z0-9]/g, "")}`
+    : undefined;
+  const contactData = {
+    name: name || null,
     role: contact.role ?? "manual",
-    phone: contact.phone ?? null,
-    email: contact.email ?? null,
+    phone: phone || null,
+    email: email || null,
     source: contact.source ?? "manual",
     createdAt: serverTimestamp(),
+  };
+  const col = collection(db, "leads", leadId, "contacts");
+  if (contactId) await setDoc(doc(col, contactId), contactData, { merge: true });
+  else await addDoc(col, contactData);
+
+  // Denormalize onto the lead doc so the snapshot / export can use it without
+  // a subcollection read. Set as primaryContact if the contact has a name.
+  if (name) {
+    await updateDoc(doc(db, "leads", leadId), {
+      primaryContact: { name, phone: phone || null, email: email || null, role: contact.role ?? "manual" },
+      updatedAt: serverTimestamp(),
+    });
+  }
+}
+
+/** Promote any stored contact to the primary contact used in RadioWorkflow exports. */
+export async function setPrimaryContact(leadId: string, contact: { name?: string; phone?: string; email?: string; role?: string }) {
+  await updateDoc(doc(db, "leads", leadId), {
+    primaryContact: {
+      name: contact.name ?? null,
+      phone: contact.phone ?? null,
+      email: contact.email ?? null,
+      role: contact.role ?? "manual",
+    },
+    updatedAt: serverTimestamp(),
   });
 }

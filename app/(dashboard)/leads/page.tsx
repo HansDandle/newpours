@@ -179,7 +179,13 @@ export default function LeadsPage() {
     // If the query names a known operator (e.g. "McGuire Moorman"), match its whole portfolio.
     const queryOperator = matchOperatorQuery(search, operators);
     const out = rows.filter((r) => {
-      if (counties.length && !counties.includes(r.county ?? "")) return false;
+      if (counties.length) {
+        const lc = counties.map((c) => c.toLowerCase());
+        const countyMatch =
+          lc.includes((r.county ?? "").toLowerCase()) ||
+          (r.footprintCounties ?? []).some((c) => lc.includes(c.toLowerCase()));
+        if (!countyMatch) return false;
+      }
       if (categories.length && !categories.includes(r.category ?? "")) return false;
       if (sources.length && !(r.sources ?? []).some((s) => sources.includes(s.type))) return false;
       if (signals.length && !(r.signals ?? []).some((s) => signals.includes(s))) return false;
@@ -275,9 +281,15 @@ export default function LeadsPage() {
       "Office Phone", "Mobile/Cell", "Other Phone", "Fax Number", "Email Address", "Position",
     ];
     const lines = leadsToExport.map((r) => {
-      const phone = r.phones?.[0] ?? "";
-      const email = r.emails?.[0] ?? "";
-      const hasOwner = Boolean(r.ownerName);
+      // primaryContact is the manually-designated contact (name + direct number).
+      // Fall back to ownerName / phones[0] / emails[0] from the lead doc.
+      const pc = r.primaryContact;
+      const contactName = pc?.name || r.ownerName || "";
+      const contactRole = pc?.role ?? (r.ownerName ? "Owner" : "");
+      const phone = pc?.phone || r.phones?.[0] || "";
+      const email = pc?.email || r.emails?.[0] || "";
+      const [firstName, ...rest] = (contactName ?? "").split(" ");
+      const surname = rest.join(" ");
       return [
         r.id,                        // Company ID
         r.businessName,              // Account Name
@@ -289,8 +301,8 @@ export default function LeadsPage() {
         "",                          // General Cell/Mobile
         "",                          // General Fax
         email,                       // General Email
-        hasOwner ? r.ownerName : "", // Contact Name
-        hasOwner ? "Owner" : "",     // Position
+        contactName,                 // Contact Name
+        contactRole,                 // Position
         "",                          // Spot Separation
         "",                          // Competitive Code #1
         "",                          // Competitive Code #2
@@ -304,15 +316,15 @@ export default function LeadsPage() {
         "",                          // Postal City
         "",                          // Postal State
         "",                          // Postal Zip/Postal Code
-        "",                          // Contact - Full Name
-        "",                          // Contact - First Name
-        "",                          // Contact - Surname
-        "",                          // Office Phone
+        contactName,                 // Contact - Full Name
+        firstName,                   // Contact - First Name
+        surname,                     // Contact - Surname
+        phone,                       // Office Phone
         "",                          // Mobile/Cell
         "",                          // Other Phone
         "",                          // Fax Number
-        "",                          // Email Address (additional contact)
-        "",                          // Position (additional contact)
+        email,                       // Email Address (additional contact)
+        contactRole,                 // Position (additional contact)
       ].map(csvEscape).join(",");
     });
     const blob = new Blob([[RW_HEADERS.map(csvEscape).join(","), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });

@@ -40,6 +40,7 @@ interface InstitutionAgg {
   cert: string;
   name: string;
   cities: Set<string>;       // canonical broadcast cities covered
+  counties: Set<string>;     // counties of footprint branches
   main?: FdicBranch;         // representative (main office, else first) branch
   first?: FdicBranch;
 }
@@ -89,10 +90,12 @@ export async function runBanksJob(options?: { minCities?: number; maxLeads?: num
     if (!cert) continue;
     let agg = byInstitution.get(cert);
     if (!agg) {
-      agg = { cert, name: String(b.NAME ?? '').trim(), cities: new Set(), first: b };
+      agg = { cert, name: String(b.NAME ?? '').trim(), cities: new Set(), counties: new Set(), first: b };
       byInstitution.set(cert, agg);
     }
     agg.cities.add(canonical);
+    const county = String(b.COUNTY ?? '').trim();
+    if (county) agg.counties.add(county);
     if (b.MAINOFF === 1) agg.main = b;
   }
 
@@ -122,6 +125,7 @@ export async function runBanksJob(options?: { minCities?: number; maxLeads?: num
           county: String(rep.COUNTY ?? '').trim(),
           zipCode: String(rep.ZIP ?? '').slice(0, 5),
           footprintCities,
+          footprintCounties: [...agg.counties].sort(),
         },
         source,
         [],

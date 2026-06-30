@@ -18,6 +18,8 @@ export interface RwAccount {
   owner: string; // the RadioWorkflow rep who owns the account
   prospect: boolean;
   archived: boolean;
+  /** Direct URL to the account profile page — returned by the extension when available. */
+  url?: string;
 }
 
 export interface RwLookupResult {

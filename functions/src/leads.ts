@@ -36,6 +36,8 @@ export interface LeadIdentity {
   website?: string;
   /** Broadcast cities this business covers (set by the bank-branch ingest). */
   footprintCities?: string[];
+  /** Counties of footprint branches — a bank may have one representative county but span many. */
+  footprintCounties?: string[];
 }
 
 export interface SeedContact {
@@ -126,6 +128,8 @@ export async function upsertLead(
   const footprintCities = unionStrings(existing?.footprintCities, identity.footprintCities);
   merged.footprintCities = footprintCities;
   merged.footprintCount = footprintCities.length;
+  const footprintCounties = unionStrings(existing?.footprintCounties, identity.footprintCounties);
+  if (footprintCounties.length) merged.footprintCounties = footprintCounties;
   merged.campaignFit = computeCampaignFit({
     category: merged.category,
     sources,
