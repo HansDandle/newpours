@@ -41,6 +41,7 @@ const SOURCE_LABELS: Record<string, string> = {
   attorney: "Law firm (Google Places)",
   bank_branch: "Bank / credit union (FDIC)",
   medical_npi: "Medical facility (Google)",
+  home_services: "Home services (Google)",
 };
 
 const CAMPAIGN_LABELS: { key: "underwriting" | "naming" | "football"; label: string }[] = [

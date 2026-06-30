@@ -32,7 +32,7 @@ interface FitInput {
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
 // Categories whose businesses typically sponsor community / small-town sports.
-const COMMUNITY_CATEGORIES = new Set(['Financial', 'Medical', 'Legal', 'Retail & Services', 'Housing']);
+const COMMUNITY_CATEGORIES = new Set(['Financial', 'Medical', 'Legal', 'Retail & Services', 'Housing', 'Home Services']);
 
 /** Largest dollar figure we know about a lead — revenue, buildout cost, 990 revenue. */
 function wealthProxy(input: FitInput): number {

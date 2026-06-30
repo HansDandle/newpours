@@ -20,6 +20,7 @@ import { runNonprofitsJob } from './ingestNonprofits';
 import { runAttorneysJob } from './ingestAttorneys';
 import { runBanksJob } from './ingestBanks';
 import { runMedicalJob } from './ingestMedical';
+import { runHomeServicesJob } from './ingestHomeServices';
 import { runNewsJob } from './enrichNews';
 import { computeCampaignFit } from './campaignFit';
 import { computeCategory } from './categorize';
@@ -424,6 +425,14 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.created;
         notes = `Medical ingest (Google Places, >=100 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+      } else if (jobName === 'home_services_ingest') {
+        const minReviewsRaw = Number(data.minReviews);
+        const result = await runHomeServicesJob({
+          county: countyFilter || undefined,
+          minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
+        });
+        processed = result.created;
+        notes = `Home-services ingest (Google Places, >=250 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'news_enrich') {
         const result = await runNewsJob({ limit: 500 });
         processed = result.processed;

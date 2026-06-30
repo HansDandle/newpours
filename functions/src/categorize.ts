@@ -17,6 +17,7 @@ export const LEAD_CATEGORIES = [
   'Nonprofit',
   'Legal',
   'Financial',
+  'Home Services',
   'Other',
 ] as const;
 
@@ -68,6 +69,9 @@ export function computeCategory(input: CategorizeInput): LeadCategory {
 
   // Medical facility from the NPPES registry.
   if (hasType('medical_npi')) return 'Medical';
+
+  // Home-services company (pest control, HVAC, roofing, …).
+  if (hasType('home_services')) return 'Home Services';
 
   // Keyword match across the name + permit descriptions + license type.
   const parts: string[] = [input.businessName ?? ''];
