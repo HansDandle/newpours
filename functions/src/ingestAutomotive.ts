@@ -22,24 +22,34 @@ import { loadOperators } from './operators';
 
 if (!admin.apps.length) admin.initializeApp();
 
-const MIN_REVIEWS = 150;
+const MIN_REVIEWS = 350;
 const MAX_LEADS = 2000;
 
 // County-wide coverage across the 9 counties (shared with the other discovery ingests).
 import { COVERAGE_CITY_COUNTY as CITY_COUNTY, parseCoverageAddress, resolveCoverageCity } from './coverageCities';
 
-// Automotive segments that advertise locally: dealerships + collision + independent repair.
+// Automotive segments that advertise locally. Dealerships are the priority (by far
+// the heaviest local-radio spenders), so they lead the list and get brand-specific
+// queries to surface more of them; collision + independent repair follow.
 const AUTO_QUERIES = [
+  // Dealerships — the money.
   'car dealership',
+  'new car dealership',
   'used car dealer',
+  'truck dealership',
+  'Ford dealer',
+  'Chevrolet dealer',
+  'Toyota dealer',
+  'Honda dealer',
+  'Chrysler Dodge Jeep Ram dealer',
+  'Nissan dealer',
+  // Collision & independent repair.
   'auto repair shop',
   'collision center',
   'auto body shop',
   'tire shop',
   'transmission repair',
   'brake repair',
-  'auto detailing',
-  'muffler and brake shop',
 ];
 
 // Big national quick-lube / oil-change chains — excluded. They advertise

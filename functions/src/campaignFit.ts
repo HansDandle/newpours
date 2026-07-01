@@ -44,7 +44,7 @@ const REVIEW_TIERS: Record<string, [number, number, number, number]> = {
   'Financial':         [ 10,  30,   80,  200],
   'Home Services':     [ 20,  60,  150,  400],
   'Retail & Services': [ 30, 100,  300,  800],
-  'Automotive':        [ 75, 200,  600, 1500], // dealerships run high; indie shops lower
+  'Automotive':        [350, 700, 1500, 3500], // dealer-heavy (350+ floor); big groups run into the thousands
   'Nonprofit':         [  5,  15,   40,  100],
   'Housing':           [ 10,  30,   80,  200],
 };

@@ -451,7 +451,7 @@ export const processAdminTrigger = onDocumentCreated(
           minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
         });
         processed = result.created;
-        notes = `Automotive ingest (Google Places, >=150 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, chainsExcluded=${result.excluded}, outOfArea=${result.outOfArea}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Automotive ingest (Google Places, >=350 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, chainsExcluded=${result.excluded}, outOfArea=${result.outOfArea}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'news_enrich') {
         const result = await runNewsJob({ limit: 500 });
         processed = result.processed;
