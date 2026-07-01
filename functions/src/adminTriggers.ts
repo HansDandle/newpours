@@ -415,7 +415,7 @@ export const processAdminTrigger = onDocumentCreated(
           minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
         });
         processed = result.created;
-        notes = `Attorney ingest (Google Places${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, heavyAdvertisers=${result.matched}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Attorney ingest (Google Places${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, heavyAdvertisers=${result.matched}, outOfArea=${result.outOfArea}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'bank_ingest') {
         const result = await runBanksJob();
         processed = result.created;
@@ -427,7 +427,7 @@ export const processAdminTrigger = onDocumentCreated(
           minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
         });
         processed = result.created;
-        notes = `Medical ingest (Google Places, >=100 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Medical ingest (Google Places, >=100 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, outOfArea=${result.outOfArea}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'home_services_ingest') {
         const minReviewsRaw = Number(data.minReviews);
         const result = await runHomeServicesJob({
@@ -435,7 +435,7 @@ export const processAdminTrigger = onDocumentCreated(
           minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
         });
         processed = result.created;
-        notes = `Home-services ingest (Google Places, >=250 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Home-services ingest (Google Places, >=250 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, outOfArea=${result.outOfArea}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'food_drink_ingest') {
         const minReviewsRaw = Number(data.minReviews);
         const result = await runFoodDrinkJob({
@@ -443,7 +443,7 @@ export const processAdminTrigger = onDocumentCreated(
           minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
         });
         processed = result.created;
-        notes = `Food & Drink discovery (Google Places, >=200 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, prunedTabcDump=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Food & Drink discovery (Google Places, >=200 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, outOfArea=${result.outOfArea}, prunedTabcDump=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'automotive_ingest') {
         const minReviewsRaw = Number(data.minReviews);
         const result = await runAutomotiveJob({
@@ -451,7 +451,7 @@ export const processAdminTrigger = onDocumentCreated(
           minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
         });
         processed = result.created;
-        notes = `Automotive ingest (Google Places, >=150 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, chainsExcluded=${result.excluded}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+        notes = `Automotive ingest (Google Places, >=150 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, chainsExcluded=${result.excluded}, outOfArea=${result.outOfArea}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'news_enrich') {
         const result = await runNewsJob({ limit: 500 });
         processed = result.processed;

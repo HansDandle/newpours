@@ -26,7 +26,7 @@ const MIN_REVIEWS = 150;
 const MAX_LEADS = 2000;
 
 // County-wide coverage across the 9 counties (shared with the other discovery ingests).
-import { COVERAGE_CITY_COUNTY as CITY_COUNTY } from './coverageCities';
+import { COVERAGE_CITY_COUNTY as CITY_COUNTY, parseCoverageAddress, resolveCoverageCity } from './coverageCities';
 
 // Automotive segments that advertise locally: dealerships + collision + independent repair.
 const AUTO_QUERIES = [
@@ -85,18 +85,13 @@ async function placeDetails(placeId: string, apiKey: string): Promise<PlaceDetai
   return json?.result ?? {};
 }
 
-function parseAddress(formatted: string): { street: string; zip: string } {
-  const parts = String(formatted ?? '').split(',').map((p) => p.trim());
-  const zip = (String(formatted ?? '').match(/\b(\d{5})\b/) ?? [])[1] ?? '';
-  return { street: parts[0] ?? '', zip };
-}
-
 export interface AutomotiveJobResult {
   queries: number;
   scanned: number;
   matched: number;
   created: number;
   excluded: number;
+  outOfArea: number;
   pruned: number;
 }
 
@@ -127,16 +122,17 @@ export async function runAutomotiveJob(options?: {
   let matched = 0;
   let created = 0;
   let excluded = 0;
+  let outOfArea = 0;
 
-  for (const [city, county] of cities) {
+  for (const [queryCity] of cities) {
     for (const trade of AUTO_QUERIES) {
       if (created >= maxLeads) break;
       queries++;
       let results: PlacesResult[];
       try {
-        results = await textSearch(`${trade} ${city} TX`, apiKey);
+        results = await textSearch(`${trade} ${queryCity} TX`, apiKey);
       } catch (err) {
-        console.error(`Automotive text search failed for "${trade} ${city}":`, err);
+        console.error(`Automotive text search failed for "${trade} ${queryCity}":`, err);
         continue;
       }
       await sleep(110);
@@ -157,10 +153,18 @@ export async function runAutomotiveJob(options?: {
           excluded++;
           continue;
         }
-        matched++;
 
-        const { street, zip } = parseAddress(r.formatted_address ?? '');
+        const { street, city: rawCity, zip } = parseCoverageAddress(r.formatted_address ?? '');
         if (!street) continue;
+
+        // Google returns statewide matches for sparse queries — keep only businesses
+        // whose ACTUAL address city is inside the coverage area, and tag them with
+        // their true city/county (not the query city).
+        const coverage = resolveCoverageCity(rawCity);
+        if (!coverage) { outOfArea++; continue; }
+        const city = coverage.city;
+        const county = coverage.county;
+        matched++;
 
         let detail: PlaceDetail = {};
         try {
@@ -252,7 +256,7 @@ export async function runAutomotiveJob(options?: {
     if (ops > 0) await batch.commit();
   }
 
-  return { queries, scanned, matched, created, excluded, pruned };
+  return { queries, scanned, matched, created, excluded, outOfArea, pruned };
 }
 
 /** Scheduled monthly automotive ingest. */

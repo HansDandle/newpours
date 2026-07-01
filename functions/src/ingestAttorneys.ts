@@ -26,7 +26,7 @@ const MAX_LEADS = 500;
 
 // County-wide coverage (all towns across the 9 counties) — shared with the other
 // discovery ingests. The football broadcast-city list is separate (footprint only).
-import { COVERAGE_CITY_COUNTY as CITY_COUNTY } from './coverageCities';
+import { COVERAGE_CITY_COUNTY as CITY_COUNTY, parseCoverageAddress, resolveCoverageCity } from './coverageCities';
 
 // Practice areas whose firms advertise the most heavily.
 const PRACTICE_QUERIES = [
@@ -77,18 +77,12 @@ async function placeDetails(placeId: string, apiKey: string): Promise<PlaceDetai
   return json?.result ?? {};
 }
 
-/** Pull the street portion + zip out of a Google formatted_address ("123 Main St, Austin, TX 78701, USA"). */
-function parseAddress(formatted: string): { street: string; zip: string } {
-  const parts = String(formatted ?? '').split(',').map((p) => p.trim());
-  const zip = (String(formatted ?? '').match(/\b(\d{5})\b/) ?? [])[1] ?? '';
-  return { street: parts[0] ?? '', zip };
-}
-
 export interface AttorneysJobResult {
   queries: number;
   scanned: number;
   matched: number;
   created: number;
+  outOfArea: number;
 }
 
 /**
@@ -118,16 +112,17 @@ export async function runAttorneysJob(options?: {
   let scanned = 0;
   let matched = 0;
   let created = 0;
+  let outOfArea = 0;
 
-  for (const [city, county] of cities) {
+  for (const [queryCity] of cities) {
     for (const practice of PRACTICE_QUERIES) {
       if (created >= maxLeads) break;
       queries++;
       let results: PlacesResult[];
       try {
-        results = await textSearch(`${practice} ${city} TX`, apiKey);
+        results = await textSearch(`${practice} ${queryCity} TX`, apiKey);
       } catch (err) {
-        console.error(`Attorney text search failed for "${practice} ${city}":`, err);
+        console.error(`Attorney text search failed for "${practice} ${queryCity}":`, err);
         continue;
       }
       await sleep(120);
@@ -141,10 +136,17 @@ export async function runAttorneysJob(options?: {
 
         const reviews = Number(r.user_ratings_total ?? 0);
         if (reviews < minReviews) continue; // not a heavy advertiser
-        matched++;
 
-        const { street, zip } = parseAddress(r.formatted_address ?? '');
+        const { street, city: rawCity, zip } = parseCoverageAddress(r.formatted_address ?? '');
         if (!street) continue;
+
+        // Keep only firms whose ACTUAL address city is inside coverage; tag them
+        // with their true city/county (Google returns statewide matches).
+        const coverage = resolveCoverageCity(rawCity);
+        if (!coverage) { outOfArea++; continue; }
+        const city = coverage.city;
+        const county = coverage.county;
+        matched++;
 
         let detail: PlaceDetail = {};
         try {
@@ -215,7 +217,7 @@ export async function runAttorneysJob(options?: {
     }
   }
 
-  return { queries, scanned, matched, created };
+  return { queries, scanned, matched, created, outOfArea };
 }
 
 /** Scheduled monthly attorney ingest (firm rosters change slowly). */

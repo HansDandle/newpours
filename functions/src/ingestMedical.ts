@@ -27,7 +27,7 @@ const MIN_REVIEWS = 500; // proxy for an established, advertising facility (tune
 const MAX_LEADS = 2000;
 
 // County-wide coverage across the 9 counties (shared with the other discovery ingests).
-import { COVERAGE_CITY_COUNTY as CITY_COUNTY } from './coverageCities';
+import { COVERAGE_CITY_COUNTY as CITY_COUNTY, parseCoverageAddress, resolveCoverageCity } from './coverageCities';
 
 // Practice areas worth calling — the original four plus the widened set.
 const MEDICAL_QUERIES = [
@@ -84,18 +84,12 @@ async function placeDetails(placeId: string, apiKey: string): Promise<PlaceDetai
   return json?.result ?? {};
 }
 
-/** Pull the street portion + zip out of a Google formatted_address. */
-function parseAddress(formatted: string): { street: string; zip: string } {
-  const parts = String(formatted ?? '').split(',').map((p) => p.trim());
-  const zip = (String(formatted ?? '').match(/\b(\d{5})\b/) ?? [])[1] ?? '';
-  return { street: parts[0] ?? '', zip };
-}
-
 export interface MedicalJobResult {
   queries: number;
   scanned: number;
   matched: number;
   created: number;
+  outOfArea: number;
   pruned: number;
 }
 
@@ -129,16 +123,17 @@ export async function runMedicalJob(options?: {
   let scanned = 0;
   let matched = 0;
   let created = 0;
+  let outOfArea = 0;
 
-  for (const [city, county] of cities) {
+  for (const [queryCity] of cities) {
     for (const practice of MEDICAL_QUERIES) {
       if (created >= maxLeads) break;
       queries++;
       let results: PlacesResult[];
       try {
-        results = await textSearch(`${practice} ${city} TX`, apiKey);
+        results = await textSearch(`${practice} ${queryCity} TX`, apiKey);
       } catch (err) {
-        console.error(`Medical text search failed for "${practice} ${city}":`, err);
+        console.error(`Medical text search failed for "${practice} ${queryCity}":`, err);
         continue;
       }
       await sleep(110);
@@ -152,10 +147,17 @@ export async function runMedicalJob(options?: {
 
         const reviews = Number(r.user_ratings_total ?? 0);
         if (reviews < minReviews) continue; // not established enough
-        matched++;
 
-        const { street, zip } = parseAddress(r.formatted_address ?? '');
+        const { street, city: rawCity, zip } = parseCoverageAddress(r.formatted_address ?? '');
         if (!street) continue;
+
+        // Keep only businesses whose ACTUAL address city is inside coverage; tag
+        // them with their true city/county (Google returns statewide matches).
+        const coverage = resolveCoverageCity(rawCity);
+        if (!coverage) { outOfArea++; continue; }
+        const city = coverage.city;
+        const county = coverage.county;
+        matched++;
 
         let detail: PlaceDetail = {};
         try {
@@ -241,7 +243,7 @@ export async function runMedicalJob(options?: {
     if (ops > 0) await batch.commit();
   }
 
-  return { queries, scanned, matched, created, pruned };
+  return { queries, scanned, matched, created, outOfArea, pruned };
 }
 
 /** Scheduled monthly medical ingest. */

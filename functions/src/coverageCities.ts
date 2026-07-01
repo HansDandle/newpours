@@ -11,6 +11,31 @@
  * Gillespie.
  */
 
+/**
+ * Normalized lookup (lowercased city -> canonical city + county). Used by every
+ * Places-discovery ingest to resolve a result's TRUE city/county from its
+ * address and reject out-of-area hits — Google's text search returns statewide
+ * matches for sparse small-town queries, so we must trust the address, never the
+ * query city.
+ */
+export function resolveCoverageCity(rawCity: string): { city: string; county: string } | null {
+  return COVERAGE_LOOKUP[String(rawCity ?? '').trim().toLowerCase()] ?? null;
+}
+
+/**
+ * Parse a Google-formatted address into street / city / zip. The city is the
+ * comma part immediately before the "TX 78745" state+zip part — robust to a
+ * suite living in an earlier part (e.g. "123 Main St, Ste A, Austin, TX 78701").
+ */
+export function parseCoverageAddress(formatted: string): { street: string; city: string; zip: string } {
+  const parts = String(formatted ?? '').split(',').map((p) => p.trim()).filter(Boolean);
+  const zip = (String(formatted ?? '').match(/\b(\d{5})\b/) ?? [])[1] ?? '';
+  let city = '';
+  const stateIdx = parts.findIndex((p) => /^TX\b/i.test(p) || /\bTX\s*\d{5}\b/i.test(p));
+  if (stateIdx > 0) city = parts[stateIdx - 1] ?? '';
+  return { street: parts[0] ?? '', city, zip };
+}
+
 export const COVERAGE_CITY_COUNTY: Record<string, string> = {
   // Travis
   'Austin': 'Travis', 'Pflugerville': 'Travis', 'Lakeway': 'Travis', 'Bee Cave': 'Travis',
@@ -42,3 +67,7 @@ export const COVERAGE_CITY_COUNTY: Record<string, string> = {
   // Gillespie
   'Fredericksburg': 'Gillespie', 'Harper': 'Gillespie', 'Stonewall': 'Gillespie',
 };
+
+const COVERAGE_LOOKUP: Record<string, { city: string; county: string }> = Object.fromEntries(
+  Object.entries(COVERAGE_CITY_COUNTY).map(([city, county]) => [city.toLowerCase(), { city, county }])
+);
