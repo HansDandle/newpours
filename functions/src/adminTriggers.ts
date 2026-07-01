@@ -22,6 +22,7 @@ import { runBanksJob } from './ingestBanks';
 import { runMedicalJob } from './ingestMedical';
 import { runHomeServicesJob } from './ingestHomeServices';
 import { runFoodDrinkJob } from './ingestFoodDrink';
+import { runAutomotiveJob } from './ingestAutomotive';
 import { runGenerateLeadsSnapshot } from './leadsSnapshot';
 import { runNewsJob } from './enrichNews';
 import { computeCampaignFit } from './campaignFit';
@@ -443,6 +444,14 @@ export const processAdminTrigger = onDocumentCreated(
         });
         processed = result.created;
         notes = `Food & Drink discovery (Google Places, >=200 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, prunedTabcDump=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
+      } else if (jobName === 'automotive_ingest') {
+        const minReviewsRaw = Number(data.minReviews);
+        const result = await runAutomotiveJob({
+          county: countyFilter || undefined,
+          minReviews: Number.isFinite(minReviewsRaw) ? minReviewsRaw : undefined,
+        });
+        processed = result.created;
+        notes = `Automotive ingest (Google Places, >=150 reviews${countyFilter ? `, county=${countyFilter}` : ', coverage cities'}): created=${result.created}, established=${result.matched}, chainsExcluded=${result.excluded}, pruned=${result.pruned}, scanned=${result.scanned}, queries=${result.queries}`;
       } else if (jobName === 'news_enrich') {
         const result = await runNewsJob({ limit: 500 });
         processed = result.processed;
@@ -640,7 +649,7 @@ export const processAdminTrigger = onDocumentCreated(
       const LEAD_MUTATING = new Set([
         'tabc_ingest', 'tabs_ingest', 'multifamily_ingest', 'multifamily_pm', 'nonprofit_ingest',
         'attorney_ingest', 'bank_ingest', 'medical_ingest', 'home_services_ingest', 'food_drink_ingest',
-        'recategorize', 'recompute_fit', 'retag_operators', 'news_enrich', 'prune_out_of_area',
+        'automotive_ingest', 'recategorize', 'recompute_fit', 'retag_operators', 'news_enrich', 'prune_out_of_area',
       ]);
       if (finalStatus === 'success' && LEAD_MUTATING.has(jobName)) {
         try {

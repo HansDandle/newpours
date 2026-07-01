@@ -32,7 +32,8 @@ interface FitInput {
 const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 
 // Categories whose businesses typically sponsor community / small-town sports.
-const COMMUNITY_CATEGORIES = new Set(['Financial', 'Medical', 'Legal', 'Retail & Services', 'Housing', 'Home Services']);
+// Auto dealers & repair shops are classic Friday-night-lights sponsors.
+const COMMUNITY_CATEGORIES = new Set(['Financial', 'Medical', 'Legal', 'Retail & Services', 'Housing', 'Home Services', 'Automotive']);
 
 // Per-category review thresholds for tiers 1–4 (modest → established → prominent → dominant).
 // Calibrated so tier 3 = "top 10% of this vertical" — makes cross-vertical comparison fair.
@@ -43,6 +44,7 @@ const REVIEW_TIERS: Record<string, [number, number, number, number]> = {
   'Financial':         [ 10,  30,   80,  200],
   'Home Services':     [ 20,  60,  150,  400],
   'Retail & Services': [ 30, 100,  300,  800],
+  'Automotive':        [ 75, 200,  600, 1500], // dealerships run high; indie shops lower
   'Nonprofit':         [  5,  15,   40,  100],
   'Housing':           [ 10,  30,   80,  200],
 };
@@ -54,6 +56,7 @@ const UNDERWRITING_BASE: Record<string, number> = {
   'Medical':           25, // dentists/docs: local, long-tenure, reliable payers
   'Legal':             20, // law firms: established, community-facing
   'Home Services':     20, // HVAC, pest control, roofing: repeat-advertiser verticals
+  'Automotive':        22, // dealers/body/repair: proven heavy local-radio advertisers
   'Retail & Services': 20,
   'Financial':         15,
   'Housing':           15,

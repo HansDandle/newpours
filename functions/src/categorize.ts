@@ -18,6 +18,7 @@ export const LEAD_CATEGORIES = [
   'Legal',
   'Financial',
   'Home Services',
+  'Automotive',
   'Government/Institutional',
   'Other',
 ] as const;
@@ -81,6 +82,9 @@ export function computeCategory(input: CategorizeInput): LeadCategory {
 
   // Home-services company (pest control, HVAC, roofing, …).
   if (hasType('home_services')) return 'Home Services';
+
+  // Automotive business (dealership, collision/body shop, repair shop).
+  if (hasType('automotive')) return 'Automotive';
 
   // Restaurant/bar discovered via Google Places.
   if (hasType('food_drink')) return 'Food & Drink';

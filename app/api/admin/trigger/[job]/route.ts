@@ -16,6 +16,7 @@ const VALID_JOBS = [
   "medical_ingest",
   "home_services_ingest",
   "food_drink_ingest",
+  "automotive_ingest",
   "recategorize",
   "recompute_fit",
   "news_enrich",

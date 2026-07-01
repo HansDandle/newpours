@@ -10,6 +10,7 @@ export { ingestBanks } from './ingestBanks';
 export { ingestMedical } from './ingestMedical';
 export { ingestHomeServices } from './ingestHomeServices';
 export { ingestFoodDrink } from './ingestFoodDrink';
+export { ingestAutomotive } from './ingestAutomotive';
 export { generateLeadsSnapshot } from './leadsSnapshot';
 export { newsLookup } from './newsLookup';
 export { enrichNews } from './enrichNews';
