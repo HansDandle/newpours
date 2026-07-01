@@ -35,6 +35,12 @@ const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
 // Auto dealers & repair shops are classic Friday-night-lights sponsors.
 const COMMUNITY_CATEGORIES = new Set(['Financial', 'Medical', 'Legal', 'Retail & Services', 'Housing', 'Home Services', 'Automotive']);
 
+// Categories that actually buy naming rights — regional "whales" big enough to put
+// their name on a building (car-dealer groups, hospital systems, restaurant groups,
+// banks, big law firms). Most have no public revenue figure in our data, so their
+// naming score is carried by within-vertical brand prominence (review tier) instead.
+const NAMING_WHALE_CATEGORIES = new Set(['Automotive', 'Medical', 'Food & Drink', 'Financial', 'Legal']);
+
 // Per-category review thresholds for tiers 1–4 (modest → established → prominent → dominant).
 // Calibrated so tier 3 = "top 10% of this vertical" — makes cross-vertical comparison fair.
 const REVIEW_TIERS: Record<string, [number, number, number, number]> = {
@@ -138,22 +144,36 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
   const UW_REVIEW = [5, 10, 16, 22] as const;
   if (tier > 0) underwriting += UW_REVIEW[tier - 1];
 
-  // ── Naming: brand prominence + budget proxy — who could put their name on a building.
-  // Money is still the anchor, but within-vertical prominence now surfaces recognizable
-  // brands (e.g. a restaurant chain or dental group) even without Comptroller data. ──
+  // ── Naming: who could put their name on a building. Two independent ways to
+  // qualify, so we don't over-index on the one data source (990s / Comptroller):
+  //   (1) a real budget/wealth figure — nonprofits & alcohol sellers land here;
+  //   (2) brand prominence for the commercial whales that have no public revenue
+  //       number (dealer groups, hospital systems, restaurant groups, banks). ──
   let naming = 0;
-  if (money >= 5_000_000) naming += 60;
-  else if (money >= 1_000_000) naming += 45;
-  else if (money >= 250_000) naming += 25;
-  else if (money >= 100_000) naming += 12;
-  if (signals.has('large_nonprofit')) naming += 20;
-  if (signals.has('multi_unit_operator')) naming += 15;
+  // (1) Wealth/budget anchor.
+  if (money >= 5_000_000) naming += 50;
+  else if (money >= 1_000_000) naming += 38;
+  else if (money >= 250_000) naming += 22;
+  else if (money >= 100_000) naming += 10;
+
+  // (2) Within-vertical brand prominence — the main lever for commercial whales.
+  const NAMING_REVIEW = [10, 24, 42, 60] as const;
+  if (tier > 0) naming += NAMING_REVIEW[tier - 1];
+
+  // Whale-category affinity, scaled by how dominant the business is in its vertical.
+  // This is what lifts big dealerships / hospital systems / restaurant groups up to
+  // the top of the naming list even though we have no revenue figure for them.
+  if (NAMING_WHALE_CATEGORIES.has(input.category ?? '')) {
+    if (tier === 4) naming += 25;
+    else if (tier === 3) naming += 18;
+    else if (tier === 2) naming += 10;
+  }
+
+  if (signals.has('large_nonprofit')) naming += 18;
+  if (signals.has('multi_unit_operator')) naming += 15; // a group, not a single site
   if (signals.has('heavy_advertiser')) naming += 12; // proven ad budget
   if (signals.has('in_the_news')) naming += 8; // prominent / visible in the community
   if (signals.has('active_advertiser')) naming += 15; // proven they spend on advertising
-  // Vertical-relative review tier: dominant businesses in ANY category have brand recognition.
-  const NAMING_REVIEW = [8, 18, 30, 45] as const;
-  if (tier > 0) naming += NAMING_REVIEW[tier - 1];
 
   return { underwriting: clamp(underwriting), naming: clamp(naming), football: clamp(football) };
 }
