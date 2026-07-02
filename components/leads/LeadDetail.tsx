@@ -182,6 +182,8 @@ export default function LeadDetail({
 
   const [apBusy, setApBusy] = useState(false);
   const [apResult, setApResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [apOrgBusy, setApOrgBusy] = useState(false);
+  const [apOrgError, setApOrgError] = useState<string | null>(null);
   const [gpBusy, setGpBusy] = useState(false);
   const [gpResult, setGpResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [rwBusy, setRwBusy] = useState(false);
@@ -319,6 +321,38 @@ export default function LeadDetail({
       setApResult({ ok: false, message: err?.message ?? "Apollo lookup failed" });
     } finally {
       setApBusy(false);
+    }
+  };
+
+  const apolloOrgUrl = (orgId: string) =>
+    `https://app.apollo.io/#/organizations/${orgId}/people?page=1&sortAscending=false&sortByField=recommendations_score`;
+
+  const handleOpenApollo = async () => {
+    setApOrgError(null);
+    // Fast path: we already know the org id — open its People tab straight away.
+    const cachedId = lead.enrichment?.apollo?.organizationId;
+    if (cachedId) {
+      window.open(apolloOrgUrl(cachedId), "_blank", "noopener,noreferrer");
+      return;
+    }
+    // Otherwise resolve (and cache) it via Apollo — free, no contact reveal.
+    setApOrgBusy(true);
+    try {
+      const fn = httpsCallable(getFunctions(), "apolloResolveOrg");
+      const res = await fn({ leadId: lead.id });
+      const d = res.data as { url?: string; organizationId?: string };
+      if (d.url) {
+        if (d.organizationId && lead.enrichment) {
+          (lead.enrichment.apollo ||= {}).organizationId = d.organizationId;
+        }
+        window.open(d.url, "_blank", "noopener,noreferrer");
+      } else {
+        setApOrgError("No Apollo match");
+      }
+    } catch (err: any) {
+      setApOrgError(err?.message ?? "Apollo lookup failed");
+    } finally {
+      setApOrgBusy(false);
     }
   };
 
@@ -619,6 +653,17 @@ export default function LeadDetail({
                 <span className={`text-xs font-medium ${apResult.ok ? "text-green-600" : "text-red-500"}`}>
                   {apResult.ok ? "✓" : "✗"} {apResult.message}
                 </span>
+              )}
+              <button
+                onClick={handleOpenApollo}
+                disabled={apOrgBusy}
+                className="rounded-full border border-indigo-400 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-500 hover:text-white transition disabled:opacity-40"
+                title="Open this company's People tab in Apollo (free — no contact reveal). Resolves the Apollo org on first use."
+              >
+                {apOrgBusy ? "Opening…" : "Open in Apollo ↗"}
+              </button>
+              {apOrgError && (
+                <span className="text-xs font-medium text-red-500">✗ {apOrgError}</span>
               )}
             </div>
           </div>

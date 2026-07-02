@@ -61,6 +61,13 @@ function domainOf(website?: string): string {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isRealEmail = (e?: string) => !!e && !/email_not_unlocked|not_unlocked|domain\.com$/i.test(e) && /@/.test(e);
 
+interface ApolloOrg {
+  id?: string;
+  name?: string;
+  primary_domain?: string;
+  website_url?: string;
+}
+
 interface ApolloPerson {
   id?: string;
   name?: string;
@@ -68,6 +75,13 @@ interface ApolloPerson {
   email?: string;
   email_status?: string;
   linkedin_url?: string;
+  organization_id?: string;
+  organization?: ApolloOrg;
+}
+
+/** Apollo web-app deep link to an org's People tab, sorted like the extension does. */
+export function apolloOrgUrl(orgId: string): string {
+  return `https://app.apollo.io/#/organizations/${orgId}/people?page=1&sortAscending=false&sortByField=recommendations_score`;
 }
 
 const apolloHeaders = (apiKey: string) => ({
@@ -142,10 +156,17 @@ export async function apolloEnrichOne(leadId: string, lead: Record<string, any>,
   const email = isRealEmail(person.email) ? String(person.email) : '';
   const name = person.name ?? '';
   const title = person.title ?? '';
+  // Org id comes from the (free) search result, not the reveal — capture it so the
+  // lead can deep-link straight to the org's People tab in Apollo.
+  const org = candidate.organization;
+  const organizationId = org?.id ?? candidate.organization_id ?? null;
+  const organizationName = org?.name ?? null;
 
   const updates: Record<string, any> = {
     'enrichment.apollo': {
       personId: candidate.id ?? null,
+      organizationId,
+      organizationName,
       name: name || null,
       title: title || null,
       email: email || null,
@@ -234,6 +255,74 @@ export const apolloEnrichLead = onCall({ cors: true }, async (request) => {
     const code = /\b(401|403)\b/.test(msg) ? 'failed-precondition' : 'internal';
     throw new HttpsError(code, msg);
   }
+});
+
+/** Find the Apollo organization id for a lead by domain (preferred) or name — free
+ * People Search, no email reveal / no credit consumed. Returns null if no match. */
+async function findOrgId(apiKey: string, opts: { domain?: string; orgName?: string }): Promise<{ id: string; name: string | null } | null> {
+  const body: Record<string, any> = { page: 1, per_page: 1 };
+  if (opts.domain) body.q_organization_domains_list = [opts.domain];
+  else if (opts.orgName) body.q_keywords = opts.orgName;
+  else return null;
+
+  const res = await fetch(SEARCH_URL, { method: 'POST', headers: apolloHeaders(apiKey), body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await apolloError('search', res));
+  const json = (await res.json()) as { people?: ApolloPerson[] };
+  const person = json.people?.[0];
+  const id = person?.organization?.id ?? person?.organization_id;
+  return id ? { id, name: person?.organization?.name ?? null } : null;
+}
+
+/**
+ * Resolve (and cache) a lead's Apollo organization id, returning a deep link to
+ * its People tab. Uses the cached id if we already have one (no API call). This
+ * is the one-click "Open in Apollo" path — free, since it never reveals contacts.
+ */
+export const apolloResolveOrg = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Sign in required');
+  const { leadId } = request.data as { leadId?: string };
+  if (!leadId) throw new HttpsError('invalid-argument', 'leadId required');
+
+  const snap = await db.doc(`leads/${leadId}`).get();
+  if (!snap.exists) throw new HttpsError('not-found', `Lead ${leadId} not found`);
+  const lead = snap.data() as Record<string, any>;
+
+  // Fast path: already cached.
+  const cached = lead.enrichment?.apollo?.organizationId;
+  if (cached) return { organizationId: cached, url: apolloOrgUrl(cached), cached: true };
+
+  const settings = await getApolloSettings();
+  if (!settings?.apiKey) throw new HttpsError('failed-precondition', 'Apollo API key not configured');
+
+  const domain = domainOf(lead.website);
+  const orgName = String(lead.businessName ?? '').trim();
+  if (!domain && !orgName) throw new HttpsError('failed-precondition', 'Lead has no website or name to search Apollo with');
+
+  let found: { id: string; name: string | null } | null;
+  try {
+    found = await findOrgId(settings.apiKey, { domain, orgName });
+  } catch (err: any) {
+    const msg = err?.message ?? 'Apollo lookup failed';
+    throw new HttpsError(/\b(401|403)\b/.test(msg) ? 'failed-precondition' : 'internal', msg);
+  }
+  if (!found) throw new HttpsError('not-found', 'No matching organization in Apollo');
+
+  // Cache the org id on the lead without clobbering any existing apollo person data.
+  await db.doc(`leads/${leadId}`).set(
+    {
+      enrichment: {
+        apollo: {
+          organizationId: found.id,
+          organizationName: found.name,
+          orgMatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+        },
+      },
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  return { organizationId: found.id, url: apolloOrgUrl(found.id), cached: false };
 });
 
 export const apolloTestConnection = onCall({ cors: true }, async (request) => {

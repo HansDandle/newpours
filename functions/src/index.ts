@@ -3,7 +3,7 @@ export { ingestTABS } from './ingestTabs';
 export { ingestMultifamily } from './ingestMultifamily';
 export { enrichMultifamilyPm } from './enrichMultifamilyPm';
 export { ingestNonprofits } from './ingestNonprofits';
-export { apolloEnrichLead, apolloTestConnection } from './enrichApollo';
+export { apolloEnrichLead, apolloTestConnection, apolloResolveOrg } from './enrichApollo';
 export { enrichLeadPlaces, enrichLeadPlacesLead } from './enrichLeadPlaces';
 export { ingestAttorneys } from './ingestAttorneys';
 export { ingestBanks } from './ingestBanks';
