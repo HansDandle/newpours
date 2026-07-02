@@ -16,6 +16,7 @@ import {
 import { resolveOperator, type OperatorDef } from './operators';
 import { computeCategory } from './categorize';
 import { computeCampaignFit } from './campaignFit';
+import { brandGroupKey, isNationalChain } from './brands';
 
 if (!admin.apps.length) admin.initializeApp();
 
@@ -110,6 +111,8 @@ export async function upsertLead(
     signals: Array.from(new Set([
       ...computeSignals({ sources, website }),
       ...((existing?.signals ?? []) as string[]).filter((s) => EXTERNAL_SIGNALS.has(s)),
+      // National-chain tag (name/domain based) so chains can be filtered out, not deleted.
+      ...(isNationalChain(firstNonEmpty(existing?.businessName, identity.businessName), website) ? ['national_chain'] : []),
     ])),
     category: computeCategory({
       businessName: firstNonEmpty(existing?.businessName, identity.businessName) ?? identity.businessName,
@@ -130,6 +133,11 @@ export async function upsertLead(
   merged.footprintCount = footprintCities.length;
   const footprintCounties = unionStrings(existing?.footprintCounties, identity.footprintCounties);
   if (footprintCounties.length) merged.footprintCounties = footprintCounties;
+
+  // Brand group key (registrable domain) — multi-office businesses share one, so the
+  // list can collapse locations and enrichment can run once per brand.
+  const groupKey = brandGroupKey(website);
+  if (groupKey) merged.groupKey = groupKey;
   merged.campaignFit = computeCampaignFit({
     category: merged.category,
     sources,

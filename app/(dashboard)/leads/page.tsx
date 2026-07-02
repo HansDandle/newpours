@@ -90,6 +90,7 @@ export default function LeadsPage() {
   const [sortKey, setSortKey] = useState<"newest" | "opening" | "name" | "cost" | "followup">("newest");
   const [campaign, setCampaign] = useState<"" | "underwriting" | "naming" | "football">("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [mobileOpen, setMobileOpen] = useState(false); // detail drawer on small screens
   const [dataAsOf, setDataAsOf] = useState<number | null>(null);
   const [dataLive, setDataLive] = useState(false);
@@ -233,7 +234,113 @@ export default function LeadsPage() {
     });
   }, [rows, search, counties, categories, sources, signals, stage, sortKey, campaign, operators]);
 
+  // Collapse multi-office brands (same groupKey) into one head row + expandable
+  // members. The head is the best office (filtered is already sorted, so first =
+  // top by the active sort/campaign). Singletons and ungrouped leads pass through.
+  const displayRows = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of filtered) if (r.groupKey) counts.set(r.groupKey, (counts.get(r.groupKey) ?? 0) + 1);
+    const seen = new Set<string>();
+    const out: { head: LeadRow; members: LeadRow[]; groupKey?: string }[] = [];
+    for (const r of filtered) {
+      const gk = r.groupKey;
+      if (gk && (counts.get(gk) ?? 0) > 1) {
+        if (seen.has(gk)) {
+          out.find((g) => g.groupKey === gk)!.members.push(r);
+        } else {
+          seen.add(gk);
+          out.push({ head: r, members: [r], groupKey: gk });
+        }
+      } else {
+        out.push({ head: r, members: [r] });
+      }
+    }
+    return out;
+  }, [filtered]);
+
+  const toggleGroup = (gk: string) =>
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(gk) ? next.delete(gk) : next.add(gk);
+      return next;
+    });
+
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
+
+  const renderRow = (
+    r: LeadRow,
+    opts?: { indent?: boolean; group?: { key: string; count: number; expanded: boolean } }
+  ) => {
+    const isSel = r.id === selected?.id;
+    const group = opts?.group;
+    return (
+      <tr key={r.id} className={`cursor-pointer transition hover:bg-[rgba(200,169,108,0.06)] ${isSel ? "bg-[rgba(200,169,108,0.08)]" : ""}`} onClick={() => { setSelectedId(r.id); setMobileOpen(true); }}>
+        <td className={`px-4 py-3 align-top ${opts?.indent ? "pl-10 border-l-2 border-slate-100" : ""}`}>
+          <div className="flex items-center gap-2">
+            {group && (
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleGroup(group.key); }}
+                className="rounded px-1 text-xs font-bold text-slate-400 hover:text-[var(--brand-accent)]"
+                title={group.expanded ? "Hide other locations" : "Show all locations"}
+              >
+                {group.expanded ? "▾" : "▸"}
+              </button>
+            )}
+            <p className="font-semibold text-slate-900">{r.businessName}</p>
+            {group && (
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500" title="Locations for this brand">
+                {group.count} locations
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-slate-500">{r.ownerName || (r.phones?.[0] ?? "No contact")}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleExport(r.id); }}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${exportIds.has(r.id) ? "bg-[var(--brand-accent)] text-white" : "border border-slate-300 text-slate-500 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]"}`}
+              title={exportIds.has(r.id) ? "Remove from export list" : "Add to export list"}
+            >
+              {exportIds.has(r.id) ? "★ Listed" : "☆ List"}
+            </button>
+            <p className="text-xs text-slate-400">{(r.sources ?? []).map((s) => s.type).join(", ")}</p>
+            {r.operator && (
+              <button
+                onClick={(e) => { e.stopPropagation(); setSearch(r.operator!.name); }}
+                className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100"
+                title="Show all properties from this operator"
+              >
+                🏛 {r.operator.name}
+              </button>
+            )}
+            {(r.footprintCount ?? 0) > 0 && (
+              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700" title="Broadcast cities covered">
+                📍 {r.footprintCount} cities
+              </span>
+            )}
+            {campaign && (
+              <span className="rounded-full bg-[rgba(200,169,108,0.15)] px-2 py-0.5 text-[10px] font-bold text-[var(--brand-accent)]" title="Campaign fit score">
+                fit {r.campaignFit?.[campaign] ?? 0}
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-3 align-top hidden md:table-cell">
+          <div className="flex flex-wrap gap-1">
+            {(r.signals ?? []).slice(0, 3).map((s) => (
+              <span key={s} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{SIGNAL_LABELS[s] ?? s}</span>
+            ))}
+          </div>
+        </td>
+        <td className="px-4 py-3 align-top hidden sm:table-cell">
+          <span className="text-xs font-semibold text-slate-700 capitalize">{r.crm?.stage ?? "new"}</span>
+        </td>
+        <td className="px-4 py-3 align-top">
+          <p className="text-slate-700">{[r.city, r.county].filter(Boolean).join(", ") || "--"}</p>
+          <p className="text-xs text-slate-400">{r.address || "No address"}</p>
+        </td>
+      </tr>
+    );
+  };
 
   const applyPreset = (sig: LeadSignal) => {
     setSignals([sig]);
@@ -450,64 +557,17 @@ export default function LeadsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtered.slice(0, 300).map((r) => {
-                    const isSel = r.id === selected?.id;
-                    return (
-                      <tr key={r.id} className={`cursor-pointer transition hover:bg-[rgba(200,169,108,0.06)] ${isSel ? "bg-[rgba(200,169,108,0.08)]" : ""}`} onClick={() => { setSelectedId(r.id); setMobileOpen(true); }}>
-                        <td className="px-4 py-3 align-top">
-                          <p className="font-semibold text-slate-900">{r.businessName}</p>
-                          <p className="text-xs text-slate-500">{r.ownerName || (r.phones?.[0] ?? "No contact")}</p>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); toggleExport(r.id); }}
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition ${exportIds.has(r.id) ? "bg-[var(--brand-accent)] text-white" : "border border-slate-300 text-slate-500 hover:border-[var(--brand-accent)] hover:text-[var(--brand-accent)]"}`}
-                              title={exportIds.has(r.id) ? "Remove from export list" : "Add to export list"}
-                            >
-                              {exportIds.has(r.id) ? "★ Listed" : "☆ List"}
-                            </button>
-                            <p className="text-xs text-slate-400">{(r.sources ?? []).map((s) => s.type).join(", ")}</p>
-                            {r.operator && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSearch(r.operator!.name); }}
-                                className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100"
-                                title="Show all properties from this operator"
-                              >
-                                🏛 {r.operator.name}
-                              </button>
-                            )}
-                            {(r.footprintCount ?? 0) > 0 && (
-                              <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700" title="Broadcast cities covered">
-                                📍 {r.footprintCount} cities
-                              </span>
-                            )}
-                            {campaign && (
-                              <span className="rounded-full bg-[rgba(200,169,108,0.15)] px-2 py-0.5 text-[10px] font-bold text-[var(--brand-accent)]" title="Campaign fit score">
-                                fit {r.campaignFit?.[campaign] ?? 0}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 align-top hidden md:table-cell">
-                          <div className="flex flex-wrap gap-1">
-                            {(r.signals ?? []).slice(0, 3).map((s) => (
-                              <span key={s} className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">{SIGNAL_LABELS[s] ?? s}</span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 align-top hidden sm:table-cell">
-                          <span className="text-xs font-semibold text-slate-700 capitalize">{r.crm?.stage ?? "new"}</span>
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <p className="text-slate-700">{[r.city, r.county].filter(Boolean).join(", ") || "--"}</p>
-                          <p className="text-xs text-slate-400">{r.address || "No address"}</p>
-                        </td>
-                      </tr>
-                    );
+                  {displayRows.slice(0, 300).flatMap((g) => {
+                    if (g.members.length === 1 || !g.groupKey) return [renderRow(g.head)];
+                    const expanded = expandedGroups.has(g.groupKey);
+                    const rows = [renderRow(g.head, { group: { key: g.groupKey, count: g.members.length, expanded } })];
+                    if (expanded) for (const m of g.members.slice(1)) rows.push(renderRow(m, { indent: true }));
+                    return rows;
                   })}
                 </tbody>
               </table>
             </div>
-            {filtered.length > 300 ? <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">Showing first 300. Refine filters to narrow the list.</p> : null}
+            {displayRows.length > 300 ? <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">Showing first 300 of {displayRows.length} brands/leads. Refine filters to narrow the list.</p> : null}
           </div>
 
           {/* Desktop side detail — sticky so it follows you as you scroll the list */}

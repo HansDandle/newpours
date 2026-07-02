@@ -30,6 +30,7 @@ export const SIGNAL_LABELS: Record<string, string> = {
   heavy_advertiser: "Heavy advertiser",
   in_the_news: "In the news",
   active_advertiser: "Running ads",
+  national_chain: "National chain",
 };
 
 const SOURCE_LABELS: Record<string, string> = {

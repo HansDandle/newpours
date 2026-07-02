@@ -130,7 +130,8 @@ export type LeadSignal =
   | 'large_nonprofit'     // nonprofit with >$1MM revenue on its latest IRS 990
   | 'heavy_advertiser'    // law firm with a high review count (proxy for ad spend)
   | 'in_the_news'         // recent Google News coverage (a press/promotion moment)
-  | 'active_advertiser';  // confirmed running ads (Meta/Google) — set by a rep
+  | 'active_advertiser'   // confirmed running ads (Meta/Google) — set by a rep
+  | 'national_chain';     // corporate/franchise national chain (buys media nationally, not local)
 
 export type CrmStage = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
 
@@ -220,6 +221,9 @@ export interface Lead {
   signals: LeadSignal[];
   /** Primary marketing category (Food & Drink, Medical, Nonprofit, …) for campaign segmentation. */
   category?: string;
+  /** Brand group key (registrable website domain) — multi-office businesses share one.
+   * Used to collapse locations in the list and share enrichment across a brand. */
+  groupKey?: string;
   /** Broadcast cities (of Sun Radio's HS-football footprint) this business operates in. */
   footprintCities?: string[];
   /** Counties spanned by footprint branches — used to match county filters for multi-location banks. */
