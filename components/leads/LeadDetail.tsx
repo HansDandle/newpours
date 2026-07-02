@@ -182,7 +182,6 @@ export default function LeadDetail({
 
   const [apBusy, setApBusy] = useState(false);
   const [apResult, setApResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [apOrgBusy, setApOrgBusy] = useState(false);
   const [apOrgError, setApOrgError] = useState<string | null>(null);
   const [gpBusy, setGpBusy] = useState(false);
   const [gpResult, setGpResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -283,7 +282,12 @@ export default function LeadDetail({
         ...(lead.phones ?? []),
         ...(lead.phones ?? []).map((p) => p.replace(/\D/g, "")),
       ];
-      const res = await lookupRadioWorkflowMany(terms);
+      const res = await lookupRadioWorkflowMany(terms, {
+        name,
+        phones: lead.phones,
+        emails: lead.emails,
+        website: lead.website,
+      });
       if (res.ok) setRwAccounts(res.results ?? []);
       else if (!auto) setRwError(res.error ?? "Lookup failed."); // stay quiet on auto-run
     } finally {
@@ -327,33 +331,35 @@ export default function LeadDetail({
   const apolloOrgUrl = (orgId: string) =>
     `https://app.apollo.io/#/organizations/${orgId}/people?page=1&sortAscending=false&sortByField=recommendations_score`;
 
-  const handleOpenApollo = async () => {
+  const apolloDomainOf = (website?: string) => {
+    if (!website) return "";
+    try {
+      return new URL(website.startsWith("http") ? website : `https://${website}`).hostname.replace(/^www\./, "");
+    } catch {
+      return "";
+    }
+  };
+
+  const handleOpenApollo = () => {
     setApOrgError(null);
-    // Fast path: we already know the org id — open its People tab straight away.
+    // Best: a cached Apollo org id (only present on API/paid plans) -> exact People tab.
     const cachedId = lead.enrichment?.apollo?.organizationId;
     if (cachedId) {
       window.open(apolloOrgUrl(cachedId), "_blank", "noopener,noreferrer");
       return;
     }
-    // Otherwise resolve (and cache) it via Apollo — free, no contact reveal.
-    setApOrgBusy(true);
-    try {
-      const fn = httpsCallable(getFunctions(), "apolloResolveOrg");
-      const res = await fn({ leadId: lead.id });
-      const d = res.data as { url?: string; organizationId?: string };
-      if (d.url) {
-        if (d.organizationId && lead.enrichment) {
-          (lead.enrichment.apollo ||= {}).organizationId = d.organizationId;
-        }
-        window.open(d.url, "_blank", "noopener,noreferrer");
-      } else {
-        setApOrgError("No Apollo match");
-      }
-    } catch (err: any) {
-      setApOrgError(err?.message ?? "Apollo lookup failed");
-    } finally {
-      setApOrgBusy(false);
+    // No-API path (works on the free plan via your logged-in Apollo session): open the
+    // companies search filtered by domain (more precise) or name. Apollo's
+    // qOrganizationName matches either.
+    const term = apolloDomainOf(lead.website) || String(lead.businessName ?? "").trim();
+    if (!term) {
+      setApOrgError("No website or name to search Apollo with");
+      return;
     }
+    const url =
+      `https://app.apollo.io/#/companies?qOrganizationName=${encodeURIComponent(term)}` +
+      `&page=1&sortAscending=false&sortByField=recommendations_score&recommendationConfigId=score`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const handlePushToHubSpot = async () => {
@@ -547,6 +553,15 @@ export default function LeadDetail({
                         {a.prospect ? "Prospect" : "Client"}
                       </span>
                       {a.archived && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600">Archived</span>}
+                      {(a.matchScore ?? 0) > 0 ? (
+                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700" title="Fields this account shares with the lead">
+                          match: {(a.matchedOn ?? []).map((m) => (m === "name~" ? "name?" : m)).join(", ")}
+                        </span>
+                      ) : (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500" title="No shared phone, email, domain, or name — likely a fuzzy false match">
+                          unverified
+                        </span>
+                      )}
                     </div>
                     {(a.contactName || a.position) && (
                       <p className="mt-1 text-slate-600">{[a.contactName, a.position].filter(Boolean).join(" · ")}</p>
@@ -656,11 +671,10 @@ export default function LeadDetail({
               )}
               <button
                 onClick={handleOpenApollo}
-                disabled={apOrgBusy}
-                className="rounded-full border border-indigo-400 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-500 hover:text-white transition disabled:opacity-40"
-                title="Open this company's People tab in Apollo (free — no contact reveal). Resolves the Apollo org on first use."
+                className="rounded-full border border-indigo-400 px-3 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-500 hover:text-white transition"
+                title="Open this company in Apollo (uses your logged-in Apollo session — no API needed)."
               >
-                {apOrgBusy ? "Opening…" : "Open in Apollo ↗"}
+                Open in Apollo ↗
               </button>
               {apOrgError && (
                 <span className="text-xs font-medium text-red-500">✗ {apOrgError}</span>
