@@ -542,13 +542,16 @@ export default function LeadDetail({
                 {(rwAccounts ?? []).slice(0, 5).map((a) => (
                   <div key={String(a.id)} className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs">
                     <div className="flex items-center gap-2">
-                      {a.url ? (
-                        <a href={a.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-700 hover:underline">
-                          {a.name || "(unnamed)"} ↗
-                        </a>
-                      ) : (
-                        <span className="font-semibold text-slate-900">{a.name || "(unnamed)"}</span>
-                      )}
+                      {(() => {
+                        const href = a.url || (a.id != null && String(a.id) ? `https://www.radioworkflow.com/app/index.php?client&cid=${encodeURIComponent(String(a.id))}` : "");
+                        return href ? (
+                          <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold text-emerald-700 hover:underline">
+                            {a.name || "(unnamed)"} ↗
+                          </a>
+                        ) : (
+                          <span className="font-semibold text-slate-900">{a.name || "(unnamed)"}</span>
+                        );
+                      })()}
                       {a.owner && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">owned by {a.owner}</span>}
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${a.prospect ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
                         {a.prospect ? "Prospect" : "Client"}
