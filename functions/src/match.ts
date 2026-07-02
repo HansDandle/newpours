@@ -161,7 +161,12 @@ export function computeSignals(lead: {
         signals.add('opening_soon');
       }
     } else if (s.type === 'nonprofit_990') {
-      signals.add('large_nonprofit');
+      // "Large" = financially substantial, not just high revenue turnover. Require
+      // assets to cover at least a year of revenue so thin/upside-down pass-through
+      // orgs (liabilities > revenue) don't get flagged as naming-rights whales.
+      const rev = Number(s.raw?.revenue ?? s.estimatedCost ?? 0);
+      const assets = Number(s.raw?.assets ?? 0);
+      if (assets >= rev) signals.add('large_nonprofit');
     } else if (s.type === 'attorney') {
       signals.add('heavy_advertiser');
     }

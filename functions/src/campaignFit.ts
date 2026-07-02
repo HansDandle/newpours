@@ -93,11 +93,29 @@ function reviewTier(category: string | undefined, reviews: number): number {
   return 0;
 }
 
-/** Largest dollar figure we know about a lead — revenue, buildout cost, 990 revenue. */
+/** The 990 balance sheet for a nonprofit lead, if present (revenue + total assets). */
+function nonprofit990(input: FitInput): { revenue: number; assets: number } | null {
+  for (const s of input.sources ?? []) {
+    if (s.type === 'nonprofit_990') {
+      return {
+        revenue: Number((s.raw as any)?.revenue ?? s.estimatedCost ?? 0) || 0,
+        assets: Number((s.raw as any)?.assets ?? 0) || 0,
+      };
+    }
+  }
+  return null;
+}
+
+/** Largest dollar figure we know about a lead — buildout cost, Comptroller revenue,
+ * or (for nonprofits) balance-sheet ASSETS. We deliberately use a nonprofit's assets,
+ * not its revenue: a high pass-through revenue with thin/upside-down assets (e.g. a
+ * legal-aid center whose liabilities exceed its revenue) is not a naming-rights whale. */
 function wealthProxy(input: FitInput): number {
   let max = 0;
   for (const s of input.sources ?? []) {
-    const c = Number(s.estimatedCost ?? 0);
+    const c = s.type === 'nonprofit_990'
+      ? Number((s.raw as any)?.assets ?? 0)
+      : Number(s.estimatedCost ?? 0);
     if (Number.isFinite(c) && c > max) max = c;
   }
   const compRev = Number(input.enrichment?.comptroller?.latestMonthRevenue ?? 0);
@@ -116,6 +134,11 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
   const money = wealthProxy(input);
   const reviews = reviewCount(input);
   const tier = reviewTier(input.category, reviews); // 0–4, relative to vertical
+  // A nonprofit only counts as a naming-rights whale if it's financially solvent
+  // (assets cover at least a year of revenue). Guards against high-revenue orgs
+  // with thin/upside-down balance sheets that can't fund a naming gift.
+  const npo = nonprofit990(input);
+  const solventNonprofit = npo != null && npo.assets >= npo.revenue;
 
   // ── Football: driven by broadcast footprint, with a small floor for the kinds of
   // regional advertisers that sponsor local sports even before we know their map. ──
@@ -169,7 +192,7 @@ export function computeCampaignFit(input: FitInput): CampaignFit {
     else if (tier === 2) naming += 10;
   }
 
-  if (signals.has('large_nonprofit')) naming += 18;
+  if (signals.has('large_nonprofit') && solventNonprofit) naming += 18;
   if (signals.has('multi_unit_operator')) naming += 15; // a group, not a single site
   if (signals.has('heavy_advertiser')) naming += 12; // proven ad budget
   if (signals.has('in_the_news')) naming += 8; // prominent / visible in the community
